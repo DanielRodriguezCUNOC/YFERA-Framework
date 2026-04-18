@@ -8,7 +8,6 @@
   const erroresLexicos = [];
   const erroresSintacticos = [];
 
-
   function resgistrarErrorLexico(lexema, linea, columna){
     erroresLexicos.push({
       tipo: 'lexico',
@@ -19,7 +18,6 @@
     });
   }  
 
-
   function registrarErrorSintactico(mensaje, lexema, linea, columna){
     erroresSintacticos.push({
       tipo: 'sintactico',
@@ -28,6 +26,13 @@
       columna,
       mensaje
     });
+  }
+
+  function registrarErrorSintacticoActual(mensaje){
+    const linea = yylloc?.first_line || yylineno || 0;
+    const columna = yylloc?.first_column ?? 0;
+    const lexema = yytext || '';
+    registrarErrorSintactico(mensaje, lexema, linea, columna);
   }
 %}
 
@@ -61,7 +66,7 @@
 "radius"              return 'RADIO';
 "style"               return 'STYLE';
 "extends"             return 'EXTIENDE';
-"for"                 return 'PARA';
+"@for"                return 'PARA';
 "from"                return 'DESDE';
 "through"             return 'HASTA';
 "to"                  return 'HASTA_EXCLUYE';
@@ -100,7 +105,8 @@
 [0-9]+("."[0-9]+)?"%"                   return 'PORCENTAJE';
 [0-9]+"."[0-9]+                         return 'DECIMAL';
 [0-9]+                                 return 'ENTERO';
-[a-zA-Z_][a-zA-Z0-9_]*               return 'IDENTIFICADOR';
+"$"[a-zA-Z][a-zA-Z0-9]*                 return 'VARIABLE';
+[a-zA-Z][a-zA-Z0-9]*               return 'IDENTIFICADOR';
 
 //* Simbolos
 
@@ -110,7 +116,6 @@
 ";"                   return 'PUNTO_COMA';
 "="                   return 'ASIGNAR';
 "@"                   return 'DECORADOR';
-"$"                   return 'DOLLAR';
 "*"                   return 'MULTIPLICADOR';
 "/"                   return 'SLASH';
 "+"                   return 'SUMA';
@@ -121,8 +126,8 @@
 <<EOF>>               return 'EOF';
 
 . {
-  const linea = yylloc?.first_line || (yylineno + 1);
-  const columna = (yylloc?.first_column ?? 0) + 1;
+  const linea = yylloc?.first_line || (yylineno);
+  const columna = (yylloc?.first_column ?? 0);
   resgistrarErrorLexico(yytext, linea, columna);
 }
 
@@ -143,6 +148,10 @@ estilos
 sentencia
   : estilo
   | ciclo
+  | error {
+      registrarErrorSintacticoActual('Sentencia de estilos invalida');
+      yyerrok;
+    }
   ;
 
 estilo
@@ -151,8 +160,8 @@ estilo
   ;
 
 ciclo
-  : DECORADOR PARA variable DESDE expr_rango HASTA expr_rango LLAVE_ABRE lista_estilos_for LLAVE_CIERRA
-  | DECORADOR PARA variable DESDE expr_rango HASTA_EXCLUYE expr_rango LLAVE_ABRE lista_estilos_for LLAVE_CIERRA
+  : PARA variable DESDE expr_rango HASTA expr_rango LLAVE_ABRE lista_estilos_for LLAVE_CIERRA
+  | PARA variable DESDE expr_rango HASTA_EXCLUYE expr_rango LLAVE_ABRE lista_estilos_for LLAVE_CIERRA
   ;
 
 lista_estilos_for
@@ -161,22 +170,27 @@ lista_estilos_for
   ;
 
 estilo_for
-  : selector LLAVE_ABRE lista_propiedades_for LLAVE_CIERRA
-  | selector EXTIENDE selector LLAVE_ABRE lista_propiedades_for LLAVE_CIERRA
+  : selector_for LLAVE_ABRE lista_propiedades_for LLAVE_CIERRA
+  | selector_for EXTIENDE selector_for LLAVE_ABRE lista_propiedades_for LLAVE_CIERRA
   ;
 
 selector
-  : segmento_selector
-  | selector GUION segmento_selector
+  : IDENTIFICADOR
+  | selector GUION IDENTIFICADOR
   ;
 
-segmento_selector
+selector_for
+  : segmento_selector_for
+  | selector_for GUION segmento_selector_for
+  ;
+
+segmento_selector_for
   : IDENTIFICADOR
   | variable
   ;
 
 variable
-  : DOLLAR IDENTIFICADOR
+  : VARIABLE
   ;
 
 lista_propiedades
@@ -186,9 +200,63 @@ lista_propiedades
   ;
 
 lista_propiedades_for
-  : propiedad PUNTO_COMA
-  | propiedad PUNTO_COMA lista_propiedades_for
-  | propiedad
+  : propiedad_for PUNTO_COMA
+  | propiedad_for PUNTO_COMA lista_propiedades_for
+  | propiedad_for
+  ;
+
+propiedad_for
+  : ALTO ASIGNAR medida_for
+  | ANCHO ASIGNAR medida_for
+  | MINIMO GUION ANCHO ASIGNAR medida_for
+  | MAXIMO GUION ANCHO ASIGNAR medida_for
+  | MINIMO GUION ALTO ASIGNAR medida_for
+  | MAXIMO GUION ALTO ASIGNAR medida_for
+
+  | FONDO COLOR ASIGNAR color_valor
+  | COLOR ASIGNAR color_valor
+
+  | TEXTO ALINEACION ASIGNAR alineacion_valor
+  | TEXTO SIZE ASIGNAR expr_numerica_for
+  | TEXTO FUENTE ASIGNAR fuente_valor
+
+  | PADDING ASIGNAR medida_for
+  | PADDING LEFT ASIGNAR medida_for
+  | PADDING RIGHT ASIGNAR medida_for
+  | PADDING TOP ASIGNAR medida_for
+  | PADDING BOTTOM ASIGNAR medida_for
+
+  | MARGIN ASIGNAR medida_for
+  | MARGIN LEFT ASIGNAR medida_for
+  | MARGIN RIGHT ASIGNAR medida_for
+  | MARGIN TOP ASIGNAR medida_for
+  | MARGIN BOTTOM ASIGNAR medida_for
+
+  | BORDE RADIO ASIGNAR expr_numerica_for
+  | BORDE STYLE ASIGNAR estilo_borde
+  | BORDE ANCHO ASIGNAR expr_numerica_for
+  | BORDE COLOR ASIGNAR color_valor
+
+  | BORDE ASIGNAR borde_shorthand_for
+  | BORDE LEFT ASIGNAR borde_shorthand_for
+  | BORDE RIGHT ASIGNAR borde_shorthand_for
+  | BORDE TOP ASIGNAR borde_shorthand_for
+  | BORDE BOTTOM ASIGNAR borde_shorthand_for
+
+  | BORDE LEFT STYLE ASIGNAR estilo_borde
+  | BORDE RIGHT STYLE ASIGNAR estilo_borde
+  | BORDE TOP STYLE ASIGNAR estilo_borde
+  | BORDE BOTTOM STYLE ASIGNAR estilo_borde
+
+  | BORDE LEFT ANCHO ASIGNAR expr_numerica_for
+  | BORDE RIGHT ANCHO ASIGNAR expr_numerica_for
+  | BORDE TOP ANCHO ASIGNAR expr_numerica_for
+  | BORDE BOTTOM ANCHO ASIGNAR expr_numerica_for
+
+  | BORDE LEFT COLOR ASIGNAR color_valor
+  | BORDE RIGHT COLOR ASIGNAR color_valor
+  | BORDE TOP COLOR ASIGNAR color_valor
+  | BORDE BOTTOM COLOR ASIGNAR color_valor
   ;
 
 propiedad
@@ -278,7 +346,6 @@ fuente_valor
   : HELVETICA
   | SANS
   | SANS SERIF
-  | SERIF
   | MONO
   | CURSIVE
   ;
@@ -294,6 +361,10 @@ borde_shorthand
   : numero estilo_borde color_valor
   ;
 
+borde_shorthand_for
+  : expr_numerica_for estilo_borde color_valor
+  ;
+
 expr_rango
   : termino_rango
   | expr_rango SUMA termino_rango
@@ -307,9 +378,32 @@ termino_rango
   ;
 
 factor_rango
-  : numero
+  : ENTERO
   | variable
   | PAREN_ABRE expr_rango PAREN_CIERRA
+  ;
+
+medida_for
+  : PORCENTAJE
+  | expr_numerica_for
+  ;
+
+expr_numerica_for
+  : termino_numerico_for
+  | expr_numerica_for SUMA termino_numerico_for
+  | expr_numerica_for GUION termino_numerico_for
+  ;
+
+termino_numerico_for
+  : factor_numerico_for
+  | termino_numerico_for MULTIPLICADOR factor_numerico_for
+  | termino_numerico_for SLASH factor_numerico_for
+  ;
+
+factor_numerico_for
+  : numero
+  | variable
+  | PAREN_ABRE expr_numerica_for PAREN_CIERRA
   ;
 
 
