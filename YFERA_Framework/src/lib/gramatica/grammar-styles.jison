@@ -143,25 +143,33 @@
 estilos
   : /* vacío */
   | estilos sentencia
-  ;
-
-sentencia
-  : estilo
-  | ciclo
-  | error {
+  | estilos error PUNTO_COMA {
       registrarErrorSintacticoActual('Sentencia de estilos invalida');
       yyerrok;
     }
   ;
 
+sentencia
+  : estilo
+  | ciclo
+  ;
+
 estilo
   : selector LLAVE_ABRE lista_propiedades LLAVE_CIERRA
   | selector EXTIENDE selector LLAVE_ABRE lista_propiedades LLAVE_CIERRA
+  | selector error LLAVE_CIERRA {
+      registrarErrorSintacticoActual('Estilo mal formado');
+      yyerrok;
+    }
   ;
 
 ciclo
   : PARA variable DESDE expr_rango HASTA expr_rango LLAVE_ABRE lista_estilos_for LLAVE_CIERRA
   | PARA variable DESDE expr_rango HASTA_EXCLUYE expr_rango LLAVE_ABRE lista_estilos_for LLAVE_CIERRA
+  | PARA error LLAVE_CIERRA {
+      registrarErrorSintacticoActual('Ciclo for de estilos invalido');
+      yyerrok;
+    }
   ;
 
 lista_estilos_for
@@ -197,12 +205,20 @@ lista_propiedades
   : propiedad PUNTO_COMA
   | propiedad PUNTO_COMA lista_propiedades
   | propiedad
+  | lista_propiedades error PUNTO_COMA {
+      registrarErrorSintacticoActual('Propiedad de estilo invalida');
+      yyerrok;
+    }
   ;
 
 lista_propiedades_for
   : propiedad_for PUNTO_COMA
   | propiedad_for PUNTO_COMA lista_propiedades_for
   | propiedad_for
+  | lista_propiedades_for error PUNTO_COMA {
+      registrarErrorSintacticoActual('Propiedad de estilo en for invalida');
+      yyerrok;
+    }
   ;
 
 propiedad_for

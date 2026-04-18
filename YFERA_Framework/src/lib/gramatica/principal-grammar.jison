@@ -118,15 +118,27 @@
 
 programa
   : lista_imports lista_declaraciones lista_funciones bloque_main
+  | error EOF {
+      registrarErrorSintacticoActual('Estructura principal invalida');
+      yyerrok;
+    }
   ;
 
 lista_imports
   : /* vacio */
   | lista_imports import_stmt
+  | lista_imports error PUNTO_COMA {
+      registrarErrorSintacticoActual('Import invalido');
+      yyerrok;
+    }
   ;
 
 import_stmt
   : IMPORTAR CADENA PUNTO_COMA
+  | IMPORTAR error PUNTO_COMA {
+      registrarErrorSintacticoActual('Import incompleto');
+      yyerrok;
+    }
   ;
 
 lista_declaraciones
@@ -149,11 +161,19 @@ lista_funciones
 
 bloque_main
   : MAIN LLAVE_ABIERTA lista_sentencias_main LLAVE_CERRADA
+  | MAIN error LLAVE_CERRADA {
+      registrarErrorSintacticoActual('Bloque main invalido');
+      yyerrok;
+    }
   ;
 
 funcion
   : FUNCION IDENTIFICADOR PARENTESIS_ABIERTO PARENTESIS_CERRADO LLAVE_ABIERTA lista_sentencias_funcion LLAVE_CERRADA
   | FUNCION IDENTIFICADOR PARENTESIS_ABIERTO lista_parametros PARENTESIS_CERRADO LLAVE_ABIERTA lista_sentencias_funcion LLAVE_CERRADA
+  | FUNCION error LLAVE_CERRADA {
+      registrarErrorSintacticoActual('Funcion invalida');
+      yyerrok;
+    }
   ;
 
 lista_parametros
@@ -222,6 +242,10 @@ sentencia_main
   | ciclo_while
   | ciclo_for
   | condicional
+  | error PUNTO_COMA {
+      registrarErrorSintacticoActual('Sentencia principal invalida');
+      yyerrok;
+    }
   ;
 
 invocacion_componente

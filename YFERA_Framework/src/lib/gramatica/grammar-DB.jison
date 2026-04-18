@@ -107,6 +107,10 @@ sentencia
 
 crear_tabla
   : TABLA IDENTIFICADOR COLUMNAS lista_columnas
+  | TABLA error COLUMNAS lista_columnas {
+      registrarErrorSintacticoActual('Creacion de tabla invalida');
+      yyerrok;
+    }
   ;
 
 lista_columnas
@@ -128,19 +132,35 @@ tipo_dato
 
 seleccionar_columna
   : IDENTIFICADOR PUNTO IDENTIFICADOR
+  | IDENTIFICADOR error IDENTIFICADOR {
+      registrarErrorSintacticoActual('Consulta de columna invalida');
+      yyerrok;
+    }
   ;
 
 insertar_registro
   : IDENTIFICADOR CORCHETE_ABRE lista_asignaciones CORCHETE_CIERRA
   | IDENTIFICADOR CORCHETE_ABRE lista_asignaciones CORCHETE_CIERRA PUNTO_COMA
+  | IDENTIFICADOR CORCHETE_ABRE error CORCHETE_CIERRA {
+      registrarErrorSintacticoActual('Insercion de registro invalida');
+      yyerrok;
+    }
   ;
 
 actualizar_registro
   : IDENTIFICADOR CORCHETE_ABRE lista_asignaciones CORCHETE_CIERRA EN ENTERO
+  | IDENTIFICADOR CORCHETE_ABRE error CORCHETE_CIERRA EN ENTERO {
+      registrarErrorSintacticoActual('Actualizacion de registro invalida');
+      yyerrok;
+    }
   ;
 
 eliminar_registro
   : IDENTIFICADOR BORRAR ENTERO
+  | IDENTIFICADOR BORRAR error {
+      registrarErrorSintacticoActual('Eliminacion de registro invalida');
+      yyerrok;
+    }
   ;
 
 lista_asignaciones

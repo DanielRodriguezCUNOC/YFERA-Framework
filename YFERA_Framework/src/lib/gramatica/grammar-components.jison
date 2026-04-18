@@ -144,6 +144,10 @@ programa
 componente
   : COMPONENTE PARENTESIS_ABRE PARENTESIS_CIERRA LLAVE_ABRE lista_elementos LLAVE_CIERRA
   | COMPONENTE PARENTESIS_ABRE lista_parametros PARENTESIS_CIERRA LLAVE_ABRE lista_elementos LLAVE_CIERRA
+  | COMPONENTE error LLAVE_CIERRA {
+      registrarErrorSintacticoActual('Declaracion de componente invalida');
+      yyerrok;
+    }
   ;
 
 lista_parametros
@@ -167,6 +171,10 @@ tipo
 lista_elementos
   : /* vacío */
   | lista_elementos elemento
+  | lista_elementos error {
+      registrarErrorSintacticoActual('Elemento de componente invalido');
+      yyerrok;
+    }
   ;
 
 elemento
@@ -181,6 +189,10 @@ elemento
 seccion
   : CORCHETE_ABRE lista_elementos CORCHETE_CIERRA
   | MENOR lista_estilos MAYOR CORCHETE_ABRE lista_elementos CORCHETE_CIERRA
+  | MENOR error CORCHETE_CIERRA {
+      registrarErrorSintacticoActual('Seccion invalida');
+      yyerrok;
+    }
   ;
 
 lista_estilos
@@ -191,6 +203,10 @@ lista_estilos
 tabla
   : TABLA_ABRE tabla_contenido TABLA_CIERRA
   | MENOR lista_estilos MAYOR TABLA_ABRE tabla_contenido TABLA_CIERRA
+  | TABLA_ABRE error TABLA_CIERRA {
+      registrarErrorSintacticoActual('Tabla invalida');
+      yyerrok;
+    }
   ;
 
 tabla_contenido
@@ -210,11 +226,19 @@ celda_tabla
 texto
   : TEXTO PARENTESIS_ABRE CADENA PARENTESIS_CIERRA
   | TEXTO MENOR lista_estilos MAYOR PARENTESIS_ABRE CADENA PARENTESIS_CIERRA
+  | TEXTO error PARENTESIS_CIERRA {
+      registrarErrorSintacticoActual('Texto invalido');
+      yyerrok;
+    }
   ;
 
 imagen
   : IMAGEN PARENTESIS_ABRE lista_fuentes_imagen PARENTESIS_CIERRA
   | IMAGEN MENOR lista_estilos MAYOR PARENTESIS_ABRE lista_fuentes_imagen PARENTESIS_CIERRA
+  | IMAGEN error PARENTESIS_CIERRA {
+      registrarErrorSintacticoActual('Imagen invalida');
+      yyerrok;
+    }
   ;
 
 lista_fuentes_imagen
@@ -231,6 +255,10 @@ fuente_imagen
 formulario
   : FORMULARIO LLAVE_ABRE lista_inputs LLAVE_CIERRA submit_opcional
   | FORMULARIO MENOR lista_estilos MAYOR LLAVE_ABRE lista_inputs LLAVE_CIERRA submit_opcional
+  | FORMULARIO error LLAVE_CIERRA {
+      registrarErrorSintacticoActual('Formulario invalido');
+      yyerrok;
+    }
   ;
 
 submit_opcional
@@ -241,6 +269,10 @@ submit_opcional
 lista_inputs
   : /* vacío */
   | lista_inputs input_elemento
+  | lista_inputs error {
+      registrarErrorSintacticoActual('Input invalido dentro de formulario');
+      yyerrok;
+    }
   ;
 
 input_elemento
@@ -303,6 +335,10 @@ logica
   | ciclo_for_each
   | condicional
   | switch_stmt
+  | error LLAVE_CIERRA {
+      registrarErrorSintacticoActual('Bloque logico invalido');
+      yyerrok;
+    }
   ;
 
 ciclo_for
