@@ -106,7 +106,7 @@
 [0-9]+"."[0-9]+                         return 'DECIMAL';
 [0-9]+                                 return 'ENTERO';
 "$"[a-zA-Z][a-zA-Z0-9]*                 return 'VARIABLE';
-[a-zA-Z][a-zA-Z0-9]*               return 'IDENTIFICADOR';
+[a-zA-Z][a-zA-Z0-9_-]*               return 'IDENTIFICADOR';
 
 //* Simbolos
 
