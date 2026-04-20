@@ -7,7 +7,7 @@ class AnalizadorSemanticoEstilos {
     constructor() {
         this.errores = [];
         this.selectoresDeclarados = {};
-        this.maxIteracionesFor = 10000;
+        //this.maxIteracionesFor = 10000;
     }
 
     agregarError(mensaje, extra = {}) {
@@ -143,9 +143,9 @@ class AnalizadorSemanticoEstilos {
                 if (nodo.inclusivo) iteraciones = Math.abs(hasta - desde) + 1;
                 else iteraciones = Math.abs(hasta - desde);
 
-                if (iteraciones > this.maxIteracionesFor) {
+               /* if (iteraciones > this.maxIteracionesFor) {
                     this.agregarError(`El for excede el máximo de iteraciones (${this.maxIteracionesFor})`);
-                }
+                }*/
             }
         }
 
