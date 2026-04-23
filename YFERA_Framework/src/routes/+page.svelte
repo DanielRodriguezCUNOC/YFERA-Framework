@@ -1,36 +1,37 @@
 <script>
-  const initialFiles = [
-    {
-      name: "main.yf",
-      content: `COMPONENT App {
-	button id="saveBtn" text="Guardar"
-}
+  import PanelArbol from "$lib/componentes/arbol/PanelArbol.svelte";
+  import TabsBar from "$lib/componentes/arbol/TabsBar.svelte";
+  import PanelEditor from "$lib/componentes/arbol/PanelEditor.svelte";
+  import PanelConsola from "$lib/componentes/arbol/PanelConsola.svelte";
+  import {
+    initialProject,
+    initialTree,
+    defaultExpandedIds,
+    defaultActiveNodeId,
+    findNodeById,
+    updateFileContent,
+  } from "$lib/arbol/arbol.state";
 
-STYLE App {
-	background: #fff;
-	color: #333;
-}`,
-    },
-    {
-      name: "consulta.db",
-      content: `SELECT * FROM usuarios;
-INSERT INTO logs (accion) VALUES ('editor abierto');`,
-    },
-    {
-      name: "estilos.st",
-      content: `WINDOW {
-	padding: 12;
-	border: 1px solid #f28c28;
-}`,
-    },
-  ];
+  let tree = $state(initialTree);
+  let expandedIds = $state(new Set(defaultExpandedIds));
+  let activeNodeId = $state(defaultActiveNodeId);
+  let openTabIds = $state([defaultActiveNodeId]);
 
-  let files = $state(initialFiles);
-  let activeFileName = $state(initialFiles[0].name);
-  const activeFile = $derived(
-    files.find((file) => file.name === activeFileName) ?? files[0],
+  const activeNode = $derived(findNodeById(tree, activeNodeId));
+  const openTabs = $derived(
+    openTabIds
+      .map((id) => findNodeById(tree, id))
+      .filter((node) => node?.type === "file")
+      .map((node) => ({ id: node.id, name: node.name })),
   );
-  let editorContent = $state(initialFiles[0].content);
+
+  let editorContent = $state(
+    findNodeById(initialTree, defaultActiveNodeId)?.content ?? "",
+  );
+  const lineCount = $derived(editorContent.split("\n").length);
+  const lineNumbers = $derived(
+    Array.from({ length: lineCount }, (_, index) => index + 1),
+  );
 
   let connected = $state(false);
   let consoleInput = $state("");
@@ -41,25 +42,55 @@ INSERT INTO logs (accion) VALUES ('editor abierto');`,
     },
   ]);
 
-  const lineCount = $derived(editorContent.split("\n").length);
-  const lineNumbers = $derived(
-    Array.from({ length: lineCount }, (_, index) => index + 1),
-  );
+  function openFile(nodeId) {
+    const node = findNodeById(tree, nodeId);
+    if (!node || node.type !== "file") return;
 
-  function openFile(file) {
-    if (activeFileName !== file.name) {
-      activeFileName = file.name;
-      editorContent = file.content;
+    activeNodeId = node.id;
+    editorContent = node.content ?? "";
+
+    if (!openTabIds.includes(node.id)) {
+      openTabIds = [...openTabIds, node.id];
     }
   }
 
+  function selectTab(tabId) {
+    openFile(tabId);
+  }
+
+  function closeTab(tabId) {
+    const filtered = openTabIds.filter((id) => id !== tabId);
+    openTabIds = filtered;
+
+    if (activeNodeId !== tabId) return;
+    if (filtered.length === 0) {
+      activeNodeId = null;
+      editorContent = "";
+      return;
+    }
+
+    const nextTabId = filtered[filtered.length - 1];
+    openFile(nextTabId);
+  }
+
+  function toggleFolder(folderId) {
+    const next = new Set(expandedIds);
+    if (next.has(folderId)) next.delete(folderId);
+    else next.add(folderId);
+    expandedIds = next;
+  }
+
   function saveFile() {
-    files = files.map((file) =>
-      file.name === activeFileName ? { ...file, content: editorContent } : file,
-    );
+    if (!activeNodeId) return;
+
+    tree = updateFileContent(tree, activeNodeId, editorContent);
+    const current = findNodeById(tree, activeNodeId);
+
+    if (!current || current.type !== "file") return;
+
     consoleHistory = [
       ...consoleHistory,
-      { type: "system", text: `Archivo ${activeFileName} guardado.` },
+      { type: "system", text: `Archivo ${current.name} guardado.` },
     ];
   }
 
@@ -124,71 +155,46 @@ INSERT INTO logs (accion) VALUES ('editor abierto');`,
   <header class="topbar">
     <div class="brand">
       <span class="brand-dot"></span>
-      <h1>YFERA Code Editor</h1>
+      <h1>YFERA Code Editor · {initialProject.name}</h1>
     </div>
     <div class="actions">
       <button class="ghost" onclick={saveFile}>Guardar</button>
-      <button class:connected onclick={toggleConnection}>
-        {connected ? "Desconectar" : "Conectar"} DB
-      </button>
     </div>
   </header>
 
   <div class="workspace">
     <section class="main-panel">
-      <div class="tabbar">
-        <span class="active-tab">{activeFile.name}</span>
-      </div>
+      <TabsBar
+        tabs={openTabs}
+        activeTabId={activeNodeId}
+        onSelectTab={selectTab}
+        onCloseTab={closeTab}
+      />
 
-      <div class="editor-wrap">
-        <div class="line-numbers">
-          {#each lineNumbers as line}
-            <span>{line}</span>
-          {/each}
-        </div>
-        <textarea bind:value={editorContent} spellcheck="false"></textarea>
-      </div>
+      <PanelEditor
+        content={editorContent}
+        {lineNumbers}
+        onContentInput={(value) => (editorContent = value)}
+      />
 
-      <section class="console-panel">
-        <div class="console-head">
-          <h2>Consola DB</h2>
-          <button class="ghost" onclick={clearConsole}>Limpiar</button>
-        </div>
-        <div class="console-output">
-          {#each consoleHistory as item}
-            <p class={item.type}>{item.text}</p>
-          {/each}
-        </div>
-        <div class="console-input-row">
-          <input
-            type="text"
-            placeholder="Escribe una consulta SQL o comando"
-            bind:value={consoleInput}
-            onkeydown={(event) => event.key === "Enter" && sendCommand()}
-          />
-          <button onclick={sendCommand}>Enviar</button>
-        </div>
-      </section>
+      <PanelConsola
+        {consoleHistory}
+        {consoleInput}
+        {connected}
+        onInputChange={(value) => (consoleInput = value)}
+        onSendCommand={sendCommand}
+        onClearConsole={clearConsole}
+        onToggleConnection={toggleConnection}
+      />
     </section>
 
-    <aside class="files-panel">
-      <div class="files-head">
-        <h2>Archivos</h2>
-        <span>{files.length}</span>
-      </div>
-      <ul>
-        {#each files as file}
-          <li>
-            <button
-              class:active={file.name === activeFileName}
-              onclick={() => openFile(file)}
-            >
-              {file.name}
-            </button>
-          </li>
-        {/each}
-      </ul>
-    </aside>
+    <PanelArbol
+      {tree}
+      {activeNodeId}
+      {expandedIds}
+      onSelectFile={openFile}
+      onToggleFolder={toggleFolder}
+    />
   </div>
 
   <footer class="statusbar">
@@ -245,184 +251,21 @@ INSERT INTO logs (accion) VALUES ('editor abierto');`,
 
   .workspace {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 290px;
+    grid-template-columns: minmax(0, 1fr) 300px;
     gap: 0.8rem;
     padding: 0.8rem;
     overflow: hidden;
-  }
-
-  .main-panel,
-  .files-panel,
-  .console-panel {
-    background: rgba(15, 21, 28, 0.88);
-    border: 1px solid #2f3a44;
-    border-radius: 12px;
+    min-height: 0;
   }
 
   .main-panel {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) 260px;
+    grid-template-rows: auto minmax(0, 1fr) 280px;
     overflow: hidden;
-  }
-
-  .tabbar {
-    padding: 0.5rem 0.7rem;
-    border-bottom: 1px solid #2f3a44;
-  }
-
-  .active-tab {
-    display: inline-block;
-    padding: 0.35rem 0.7rem;
-    background: #1f2a33;
-    border: 1px solid #f28c28;
-    border-radius: 8px;
-    font-size: 0.9rem;
-  }
-
-  .editor-wrap {
-    display: grid;
-    grid-template-columns: 56px 1fr;
-    overflow: hidden;
-  }
-
-  .line-numbers {
-    margin: 0;
-    padding: 0.8rem 0.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    text-align: right;
-    font-family: "Fira Code", "Cascadia Mono", monospace;
-    color: #7e8a95;
-    background: #121a22;
-    user-select: none;
-    overflow: hidden;
-  }
-
-  .line-numbers span {
-    height: 1.4rem;
-    font-size: 0.8rem;
-  }
-
-  textarea {
-    width: 100%;
-    height: 100%;
-    padding: 0.8rem;
-    border: none;
-    outline: none;
-    resize: none;
-    font-size: 0.92rem;
-    line-height: 1.4rem;
-    font-family: "Fira Code", "Cascadia Mono", monospace;
-    background: #0d141b;
-    color: #f4f7fa;
-  }
-
-  .console-panel {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    overflow: hidden;
-  }
-
-  .console-head,
-  .files-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.55rem 0.75rem;
-    border-bottom: 1px solid #2f3a44;
-  }
-
-  h2 {
-    margin: 0;
-    font-size: 0.9rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 700;
-    color: #ffb061;
-  }
-
-  .console-output {
-    padding: 0.7rem;
-    overflow: auto;
-    font-family: "Fira Code", "Cascadia Mono", monospace;
-    font-size: 0.82rem;
-  }
-
-  .console-output p {
-    margin: 0 0 0.4rem;
-  }
-
-  .console-output .system {
-    color: #9ac8ff;
-  }
-
-  .console-output .input {
-    color: #ffd7ae;
-  }
-
-  .console-output .output {
-    color: #9ef0bd;
-  }
-
-  .console-output .error {
-    color: #ff9a9a;
-  }
-
-  .console-input-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0.5rem;
-    padding: 0.7rem;
-    border-top: 1px solid #2f3a44;
-  }
-
-  input {
-    padding: 0.6rem 0.7rem;
-    border-radius: 8px;
-    border: 1px solid #3b4956;
-    background: #0f171f;
-    color: #eef4fa;
-    outline: none;
-  }
-
-  input:focus {
-    border-color: #f28c28;
-  }
-
-  .files-panel {
-    overflow: hidden;
-    display: grid;
-    grid-template-rows: auto 1fr;
-  }
-
-  ul {
-    list-style: none;
-    padding: 0.45rem;
-    margin: 0;
-    overflow: auto;
-  }
-
-  li button {
-    width: 100%;
-    text-align: left;
-    padding: 0.55rem 0.6rem;
-    background: transparent;
-    border: 1px solid transparent;
-    color: #dae5ef;
-    border-radius: 8px;
-    cursor: pointer;
-  }
-
-  li button:hover {
-    background: #1b2630;
-    border-color: #2f3a44;
-  }
-
-  li button.active {
-    background: rgba(242, 140, 40, 0.18);
-    border-color: #f28c28;
-    color: #ffd8ad;
+    background: rgba(15, 21, 28, 0.88);
+    border: 1px solid #2f3a44;
+    border-radius: 12px;
+    min-height: 0;
   }
 
   button {
@@ -439,11 +282,6 @@ INSERT INTO logs (accion) VALUES ('editor abierto');`,
     background: transparent;
     color: #f7b97a;
     border-color: #4c5965;
-  }
-
-  button.connected {
-    border-color: #85d6a0;
-    background: linear-gradient(180deg, #9ce6b4 0%, #68c68b 100%);
   }
 
   .actions {
@@ -471,11 +309,7 @@ INSERT INTO logs (accion) VALUES ('editor abierto');`,
     }
 
     .main-panel {
-      grid-template-rows: auto minmax(300px, 1fr) 230px;
-    }
-
-    .files-panel {
-      max-height: 220px;
+      grid-template-rows: auto minmax(300px, 1fr) 260px;
     }
   }
 
@@ -488,10 +322,6 @@ INSERT INTO logs (accion) VALUES ('editor abierto');`,
 
     .actions {
       justify-content: flex-end;
-    }
-
-    .console-input-row {
-      grid-template-columns: 1fr;
     }
   }
 </style>
