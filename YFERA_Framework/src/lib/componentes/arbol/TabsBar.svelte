@@ -1,30 +1,35 @@
 <script>
-  let { tabs = [], activeTabId = null, onSelectTab, onCloseTab } = $props();
+  let {
+    pestanas = [],
+    idPestanaActiva = null,
+    alSeleccionarPestana,
+    alCerrarPestana,
+  } = $props();
 </script>
 
 <div class="tabbar">
-  {#if tabs.length === 0}
+  {#if pestanas.length === 0}
     <span class="empty">Sin archivos abiertos</span>
   {:else}
-    {#each tabs as tab (tab.id)}
+    {#each pestanas as pestana (pestana.id)}
       <button
         class="tab"
-        class:active={tab.id === activeTabId}
-        onclick={() => onSelectTab(tab.id)}
+        class:active={pestana.id === idPestanaActiva}
+        onclick={() => alSeleccionarPestana(pestana.id)}
       >
-        <span class="tab-name">{tab.name}</span>
+        <span class="tab-name">{pestana.name}</span>
         <span
           class="close"
           role="button"
           tabindex="0"
           onclick={(event) => {
             event.stopPropagation();
-            onCloseTab(tab.id);
+            alCerrarPestana(pestana.id);
           }}
           onkeydown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
-              onCloseTab(tab.id);
+              alCerrarPestana(pestana.id);
             }
           }}>x</span
         >

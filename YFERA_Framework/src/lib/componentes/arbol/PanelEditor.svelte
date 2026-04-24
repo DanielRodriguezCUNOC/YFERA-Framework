@@ -1,18 +1,18 @@
 <script>
-  let { content = "", lineNumbers = [], onContentInput } = $props();
+  let { contenido = "", lineas = [], alCambiarContenido } = $props();
 </script>
 
 <div class="editor-wrap">
   <div class="line-numbers">
-    {#each lineNumbers as line}
-      <span>{line}</span>
+    {#each lineas as linea}
+      <span>{linea}</span>
     {/each}
   </div>
 
   <textarea
-    value={content}
+    value={contenido}
     spellcheck="false"
-    oninput={(event) => onContentInput(event.currentTarget.value)}
+    oninput={(event) => alCambiarContenido(event.currentTarget.value)}
   ></textarea>
 </div>
 

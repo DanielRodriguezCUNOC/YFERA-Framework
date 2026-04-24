@@ -2,51 +2,61 @@
   import NodoArbol from "./NodoArbol.svelte";
 
   let {
-    node,
-    level = 0,
-    activeNodeId,
-    expandedIds,
-    onSelectFile,
-    onToggleFolder,
+    nodo,
+    nivel = 0,
+    idNodoActivo,
+    idsCarpetasExpandidas,
+    alSeleccionarArchivo,
+    alAlternarCarpeta,
+    alAbrirMenuContextual,
   } = $props();
 
-  const isFolder = $derived(node.type === "folder");
-  const isExpanded = $derived(isFolder && expandedIds.has(node.id));
-  const isActive = $derived(node.type === "file" && activeNodeId === node.id);
+  const esCarpeta = $derived(nodo.type === "folder");
+  const estaExpandido = $derived(
+    esCarpeta && idsCarpetasExpandidas.has(nodo.id),
+  );
+  const estaActivo = $derived(nodo.type === "file" && idNodoActivo === nodo.id);
 
   function handleClick() {
-    if (node.type === "folder") {
-      onToggleFolder(node.id);
+    if (nodo.type === "folder") {
+      alAlternarCarpeta(nodo.id);
       return;
     }
 
-    onSelectFile(node.id);
+    alSeleccionarArchivo(nodo.id);
+  }
+
+  function handleContextMenu(event) {
+    event.preventDefault();
+    alAbrirMenuContextual(nodo, event.clientX, event.clientY);
   }
 </script>
 
 <li>
   <button
     class="node-btn"
-    class:folder={isFolder}
-    class:file={node.type === "file"}
-    class:active={isActive}
+    class:folder={esCarpeta}
+    class:file={nodo.type === "file"}
+    class:active={estaActivo}
     onclick={handleClick}
-    style={`--level:${level}`}
+    oncontextmenu={handleContextMenu}
+    style={`--level:${nivel}`}
   >
-    <span class="icon">{isFolder ? (isExpanded ? "▾" : "▸") : "•"}</span>
-    <span class="name">{node.name}</span>
+    <span class="icon">{esCarpeta ? (estaExpandido ? "▾" : "▸") : "•"}</span>
+    <span class="name">{nodo.name}</span>
   </button>
 
-  {#if isFolder && isExpanded}
+  {#if esCarpeta && estaExpandido}
     <ul class="children">
-      {#each node.children ?? [] as child (child.id)}
+      {#each nodo.children ?? [] as hijo (hijo.id)}
         <NodoArbol
-          node={child}
-          level={level + 1}
-          {activeNodeId}
-          {expandedIds}
-          {onSelectFile}
-          {onToggleFolder}
+          nodo={hijo}
+          nivel={nivel + 1}
+          {idNodoActivo}
+          {idsCarpetasExpandidas}
+          {alSeleccionarArchivo}
+          {alAlternarCarpeta}
+          {alAbrirMenuContextual}
         />
       {/each}
     </ul>

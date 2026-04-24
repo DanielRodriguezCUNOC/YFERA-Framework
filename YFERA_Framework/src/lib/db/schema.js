@@ -1,10 +1,13 @@
-export const DB_NAME = "yfera_workspace_db";
+export const DB_NAME = "yfera_arbol_db";
 export const DB_VERSION = 1;
 
-export const STORES = {
-  projects: "id, name, createdAt, updatedAt, lastOpenedAt",
-  nodes: "id, projectId, parentId, type, name, ext, order, updatedAt, [projectId+parentId], [projectId+type]",
-  tabs: "id, projectId, nodeId, order, pinned",
-  uiState: "id, projectId, activeNodeId, updatedAt"
+export const TABLAS = {
+  proyectos: "id, nombre, creadoEn, actualizadoEn, ultimoAcceso",
+  nodos:
+    "id, proyectoId, padreId, tipo, nombre, extension, orden, contenido, actualizadoEn, [proyectoId+padreId], [proyectoId+tipo]",
+  pestanas: "id, proyectoId, nodoId, orden, fijada",
+  estadoInterfaz: "id, proyectoId, nodoActivoId, actualizadoEn",
 };
+
+export const STORES = TABLAS;
 

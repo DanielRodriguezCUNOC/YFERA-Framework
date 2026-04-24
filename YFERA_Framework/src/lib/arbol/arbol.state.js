@@ -1,9 +1,9 @@
-export const initialProject = {
+export const proyectoInicial = {
   id: "project-yfera",
   name: "Proyecto YFERA",
 };
 
-export const initialTree = [
+export const arbolInicial = [
   {
     id: "folder-root",
     type: "folder",
@@ -59,33 +59,67 @@ render AppComponent("YFERA");`,
   },
 ];
 
-export const defaultExpandedIds = ["folder-root", "folder-src"];
-export const defaultActiveNodeId = "file-component";
+export const idsCarpetasIniciales = ["folder-root", "folder-src"];
+export const nodoActivoInicialId = "file-component";
 
-export function findNodeById(nodes, targetId) {
-  for (const node of nodes) {
-    if (node.id === targetId) return node;
-    if (node.type === "folder" && node.children?.length) {
-      const found = findNodeById(node.children, targetId);
-      if (found) return found;
+export function buscarNodoPorId(nodos, idNodoBuscado) {
+  let indice = 0;
+
+  while (indice < nodos.length) {
+    const nodo = nodos[indice];
+    if (nodo.id === idNodoBuscado) {
+      return nodo;
     }
+
+    if (nodo.type === "folder" && nodo.children?.length) {
+      const nodoEncontrado = buscarNodoPorId(nodo.children, idNodoBuscado);
+      if (nodoEncontrado) {
+        return nodoEncontrado;
+      }
+    }
+
+    indice += 1;
   }
+
   return null;
 }
 
-export function updateFileContent(nodes, targetId, content) {
-  return nodes.map((node) => {
-    if (node.type === "file" && node.id === targetId) {
-      return { ...node, content };
+export function actualizarContenidoArchivo(nodos, idNodoObjetivo, contenidoNuevo) {
+  const nodosActualizados = [];
+  let indice = 0;
+
+  while (indice < nodos.length) {
+    const nodo = nodos[indice];
+
+    if (nodo.type === "file" && nodo.id === idNodoObjetivo) {
+      nodosActualizados.push({ ...nodo, content: contenidoNuevo });
+      indice += 1;
+      continue;
     }
 
-    if (node.type === "folder") {
-      return {
-        ...node,
-        children: updateFileContent(node.children ?? [], targetId, content),
-      };
+    if (nodo.type === "folder") {
+      nodosActualizados.push({
+        ...nodo,
+        children: actualizarContenidoArchivo(
+          nodo.children ?? [],
+          idNodoObjetivo,
+          contenidoNuevo,
+        ),
+      });
+      indice += 1;
+      continue;
     }
 
-    return node;
-  });
+    nodosActualizados.push(nodo);
+    indice += 1;
+  }
+
+  return nodosActualizados;
 }
+
+export const initialProject = proyectoInicial;
+export const initialTree = arbolInicial;
+export const defaultExpandedIds = idsCarpetasIniciales;
+export const defaultActiveNodeId = nodoActivoInicialId;
+export const findNodeById = buscarNodoPorId;
+export const updateFileContent = actualizarContenidoArchivo;

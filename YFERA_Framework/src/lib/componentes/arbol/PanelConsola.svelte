@@ -1,12 +1,12 @@
 <script>
 	let {
-		consoleHistory = [],
-		consoleInput = "",
-		connected = false,
-		onInputChange,
-		onSendCommand,
-		onClearConsole,
-		onToggleConnection,
+		historialConsola = [],
+		entradaConsola = "",
+		conexionActiva = false,
+		alCambiarEntrada,
+		alEnviarComando,
+		alLimpiarConsola,
+		alAlternarConexion,
 	} = $props();
 </script>
 
@@ -14,16 +14,16 @@
 	<div class="console-head">
 		<h2>Consola DB</h2>
 		<div class="actions">
-			<button class="ghost" onclick={onClearConsole}>Limpiar</button>
-			<button class:connected onclick={onToggleConnection}>
-				{connected ? "Desconectar" : "Conectar"} DB
+			<button class="ghost" onclick={alLimpiarConsola}>Limpiar</button>
+			<button class:connected={conexionActiva} onclick={alAlternarConexion}>
+				{conexionActiva ? "Desconectar" : "Conectar"} DB
 			</button>
 		</div>
 	</div>
 
 	<div class="console-output">
-		{#each consoleHistory as item}
-			<p class={item.type}>{item.text}</p>
+		{#each historialConsola as item}
+			<p class={item.clase}>{item.text}</p>
 		{/each}
 	</div>
 
@@ -31,11 +31,11 @@
 		<input
 			type="text"
 			placeholder="Escribe una consulta SQL o comando"
-			value={consoleInput}
-			oninput={(event) => onInputChange(event.currentTarget.value)}
-			onkeydown={(event) => event.key === "Enter" && onSendCommand()}
+			value={entradaConsola}
+			oninput={(event) => alCambiarEntrada(event.currentTarget.value)}
+			onkeydown={(event) => event.key === "Enter" && alEnviarComando()}
 		/>
-		<button onclick={onSendCommand}>Enviar</button>
+		<button onclick={alEnviarComando}>Enviar</button>
 	</div>
 </section>
 

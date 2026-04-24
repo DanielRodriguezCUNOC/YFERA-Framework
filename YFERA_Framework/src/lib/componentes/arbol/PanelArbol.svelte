@@ -1,24 +1,37 @@
 <script>
 	import NodoArbol from "./NodoArbol.svelte";
 
-	let { tree, activeNodeId, expandedIds, onSelectFile, onToggleFolder } =
-		$props();
+	let {
+		arbol,
+		idNodoActivo,
+		idsCarpetasExpandidas,
+		alSeleccionarArchivo,
+		alAlternarCarpeta,
+		alCrearCarpeta,
+		alCrearArchivo,
+		alAbrirMenuContextual,
+	} = $props();
 </script>
 
 <aside class="files-panel">
 	<div class="files-head">
 		<h2>Arbol de trabajo</h2>
+		<div class="acciones-arbol">
+			<button class="mini" onclick={alCrearCarpeta}>+ Carpeta</button>
+			<button class="mini" onclick={alCrearArchivo}>+ Archivo</button>
+		</div>
 	</div>
 
 	<ul>
-		{#each tree as node (node.id)}
+		{#each arbol as nodo (nodo.id)}
 			<NodoArbol
-				{node}
-				level={0}
-				{activeNodeId}
-				{expandedIds}
-				{onSelectFile}
-				{onToggleFolder}
+				{nodo}
+				nivel={0}
+				{idNodoActivo}
+				{idsCarpetasExpandidas}
+				{alSeleccionarArchivo}
+				{alAlternarCarpeta}
+				{alAbrirMenuContextual}
 			/>
 		{/each}
 	</ul>
@@ -50,6 +63,26 @@
 		letter-spacing: 0.08em;
 		font-weight: 700;
 		color: #ffb061;
+	}
+
+	.acciones-arbol {
+		display: flex;
+		gap: 0.35rem;
+	}
+
+	.mini {
+		padding: 0.28rem 0.45rem;
+		border-radius: 6px;
+		border: 1px solid #4c5965;
+		background: transparent;
+		color: #f7b97a;
+		font-size: 0.76rem;
+		cursor: pointer;
+	}
+
+	.mini:hover {
+		border-color: #f28c28;
+		background: rgba(242, 140, 40, 0.12);
 	}
 
 	ul {
