@@ -41,7 +41,7 @@
 
 \s+                                 /* ignorar espacios y saltos */
 [\u200B\u200C\u200D\uFEFF\u00A0]+ /* ignorar invisibles y nbsp */
-"/*"[\s\S]*?"*/"                   /* ignorar comentarios de bloque */
+#.*                             /* ignorar comentarios de línea */
 
 "TABLE"                 return 'TABLA';
 "COLUMNS"               return 'COLUMNAS';
