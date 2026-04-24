@@ -42,8 +42,6 @@
 
 \s+                              /* ignorar espacios y saltos */
 [\u200B\u200C\u200D\uFEFF\u00A0]+   /* ignorar invisibles y nbsp */
-"/*"[\s\S]*?"*/"                /* ignorar comentarios de bloque */
-
 //* Palabras reservadas
 
 "height"              return 'ALTO';
@@ -107,6 +105,7 @@
 [0-9]+                                 return 'ENTERO';
 "$"[a-zA-Z][a-zA-Z0-9]*                 return 'VARIABLE';
 [a-zA-Z][a-zA-Z0-9_-]*               return 'IDENTIFICADOR';
+#.*                             /* ignorar comentarios de línea lo colocamos aqui para evitar colisiones con los colores hexadecimales */
 
 //* Simbolos
 
