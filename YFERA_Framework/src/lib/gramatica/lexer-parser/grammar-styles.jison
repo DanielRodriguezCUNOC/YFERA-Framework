@@ -584,7 +584,3 @@ factor_numerico_for
     { $$ = $2; }
   ;
 
-
-
-
-
