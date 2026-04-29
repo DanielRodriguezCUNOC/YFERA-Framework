@@ -162,9 +162,27 @@ function obtenerPrimerArchivo(nodosJerarquicos) {
 	return null;
 }
 
+export function obtenerTodosLosArchivos(nodos, acumulado = {}) {
+	let indice = 0;
+	while (indice < nodos.length) {
+		const nodo = nodos[indice];
+		if (nodo.type === TIPO_NODO.ARCHIVO || nodo.type === "file") {
+			acumulado[nodo.name] = nodo.content ?? "";
+		} else if (
+			(nodo.type === TIPO_NODO.CARPETA || nodo.type === "folder") &&
+			Array.isArray(nodo.children)
+		) {
+			obtenerTodosLosArchivos(nodo.children, acumulado);
+		}
+		indice += 1;
+	}
+	return acumulado;
+}
+
 export const obtenerExtension = obtenerExtensionArchivo;
 export const compactarArbol = compactarArbolParaPersistencia;
 export const construirArbol = construirArbolJerarquico;
 export const buscarNodoPlanoPorId = buscarNodoPorIdEnPlano;
 export const obtenerPrimerNodoArchivo = obtenerPrimerArchivo;
+export const extraerTodosLosArchivos = obtenerTodosLosArchivos;
 

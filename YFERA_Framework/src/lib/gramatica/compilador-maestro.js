@@ -1,8 +1,9 @@
 import { compilarEstilos } from './generador/estilos/compilar-estilos.js';
-// Los siguientes importarán los parsers generados por Jison
-// import principalParser from './lexer-parser/principal-grammar.js';
-// import componentsParser from './lexer-parser/grammar-components.js';
-// import dbParser from './lexer-parser/grammar-DB.js';
+// Parsers generados
+import stylesParser from './lexer-parser/grammar-styles.js';
+import componentsParser from './lexer-parser/grammar-components.js';
+import dbParser from './lexer-parser/grammar-DB.js';
+import principalParser from './lexer-parser/principal-grammar.js';
 
 class CompiladorMaestro {
   constructor() {
@@ -23,21 +24,32 @@ class CompiladorMaestro {
     };
 
     try {
-      // 1. Compilar Estilos
-      // Asumimos que fuentes.estilos es el AST o el código fuente
-      // Si es código fuente, primero hay que parsearlo.
-      // Por ahora usamos la base que ya existe.
-      if (fuentes.astEstilos) {
-        const resEstilos = compilarEstilos(fuentes.astEstilos);
+      // Identificar archivos relevantes
+      const stylesFiles = Object.keys(fuentes).filter(name => name.endsWith('.styles') || name.endsWith('.style'));
+      const componentsFiles = Object.keys(fuentes).filter(name => name.endsWith('.comp'));
+      const principalFiles = Object.keys(fuentes).filter(name => name.endsWith('.y') || name.endsWith('.principal'));
+
+      // Compilar Estilos
+      let astEstilosGlobal = [];
+      for (const fileName of stylesFiles) {
+        try {
+          const ast = stylesParser.parse(fuentes[fileName]);
+          if (Array.isArray(ast)) {
+            astEstilosGlobal.push(...ast);
+          }
+        } catch (e) {
+          this.errores.push({ tipo: 'parser_estilos', archivo: fileName, mensaje: e.message });
+        }
+      }
+
+      if (astEstilosGlobal.length > 0) {
+        const resEstilos = compilarEstilos(astEstilosGlobal);
         if (resEstilos.ok) {
           resultados.css = resEstilos.css;
         } else {
           this.errores.push(...resEstilos.errores);
         }
       }
-
-      // 2. Pendiente: Compilar Componentes
-      // 3. Pendiente: Compilar Lógica Principal y DB
 
       resultados.ok = this.errores.length === 0;
       resultados.errores = this.errores;
@@ -52,7 +64,7 @@ class CompiladorMaestro {
   }
 
   /**
-   * Genera el HTML final tipo SPA.
+   * Genera el HTML final tipo SPA (en linea asi como Svelte jaja).
    */
   generarBundle(resultados) {
     return `

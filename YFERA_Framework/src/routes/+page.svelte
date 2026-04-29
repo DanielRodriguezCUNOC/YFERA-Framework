@@ -21,7 +21,7 @@
     guardarEstadoDeInterfaz,
     renombrarNodo,
   } from "$lib/arbol/arbol.service.js";
-  import { obtenerPrimerNodoArchivo } from "$lib/arbol/arbol.selector.js";
+  import { obtenerPrimerNodoArchivo, extraerTodosLosArchivos } from "$lib/arbol/arbol.selector.js";
   import { TIPO_NODO } from "$lib/arbol/arbol.types.js";
   import { compilador } from "$lib/gramatica/compilador-maestro";
 
@@ -651,15 +651,14 @@
       { clase: "system", text: "Iniciando compilación del proyecto..." },
     ];
 
-    // TODO: Implementar mapeo de código desde el árbol de archivos hacia el compilador
-    const resultados = await compilador.compilar({
-      // Para pruebas iniciales, pasamos un objeto vacío
-    });
+    // Implementar mapeo de código desde el árbol de archivos hacia el compilador
+    const fuentes = extraerTodosLosArchivos(arbol);
+    const resultados = await compilador.compilar(fuentes);
 
     if (resultados.ok) {
       historialConsola = [
         ...historialConsola,
-        { clase: "system", text: "¡Compilación completada exitosamente!" },
+        { clase: "system", text: "Compilación completada" },
       ];
       if (resultados.css) {
         historialConsola = [
