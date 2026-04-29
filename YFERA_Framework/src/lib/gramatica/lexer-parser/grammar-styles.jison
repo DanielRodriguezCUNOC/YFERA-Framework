@@ -118,6 +118,7 @@
 "*"                   return 'MULTIPLICADOR';
 "/"                   return 'SLASH';
 "+"                   return 'SUMA';
+"%"                   return 'MODULO';
 "("                   return 'PAREN_ABRE';
 ")"                   return 'PAREN_CIERRA';
 ","                   return 'COMA';
@@ -572,6 +573,8 @@ termino_numerico_for
     { $$ = { op: '*', left: $1, right: $3 }; }
   | termino_numerico_for SLASH factor_numerico_for
     { $$ = { op: '/', left: $1, right: $3 }; }
+  | expr_numerica_for MODULO termino_numerico_for
+    {$$ = { op: '%', left: $1, right: $3 }; }
   ;
 
 factor_numerico_for

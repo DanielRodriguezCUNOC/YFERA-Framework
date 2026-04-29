@@ -4,10 +4,10 @@
 
 class AnalizadorSemanticoEstilos {
 
+    //* Declaracion de propiedades
     constructor() {
         this.errores = [];
-        this.selectoresDeclarados = {};
-        //this.maxIteracionesFor = 10000;
+        this.tablaSimbolos = [];
     }
 
     agregarError(mensaje, extra = {}) {
@@ -20,19 +20,19 @@ class AnalizadorSemanticoEstilos {
         });
     }
 
+    //* Inicializar las propiedades y analizar el AST
     analizar(ast) {
         this.errores = [];
-        this.selectoresDeclarados = {};
-
+        this.tablaSimbolos = [];    
         if (!Array.isArray(ast)) {
             this.agregarError('El AST de estilos debe ser un arreglo');
-            return { ok: false, errores: this.errores };
+            return { ok: false, errores: this.errores, tablaSimbolos: this.tablaSimbolos.slice() };
         }
 
         this.recolectarSelectores(ast);
         this.validarSentencias(ast);
 
-        return { ok: this.errores.length === 0, errores: this.errores };
+        return { ok: this.errores.length === 0, errores: this.errores, tablaSimbolos: this.tablaSimbolos.slice() };
     }
 
     recolectarSelectores(sentencias) {
@@ -101,12 +101,51 @@ class AnalizadorSemanticoEstilos {
 
         if (selector.indexOf('$') !== -1) return;
 
-        if (this.selectoresDeclarados[selector]) {
-            this.agregarError(`Selector duplicado: ${selector}`);
+        if(this.existeEnTabla(selector, 'selector')) {
+            this.agregarError(`Selector duplicado: ${String(selector)}`);
             return;
         }
 
-        this.selectoresDeclarados[selector] = true;
+        this.registrarEnTabla(selector, 'selector', 'global');
+    }
+
+    //* Registra un símbolo en la tabla
+//* nombre: identificador del símbolo.
+//* tipo: 'selector' o 'variable'.
+//* ambito: 'global' o identificador del for
+    registrarEnTabla(nombre, tipo, ambito){
+        const entrada = {nombre, tipo, ambito};
+        this.tablaSimbolos.push(entrada);
+    }
+
+    //* Busca si un símbolo existe en la tabla (en cualquier ámbito por ahora).
+//* nombre: identificador a buscar
+//* tipo: tipo de símbolo
+    existeEnTabla(nombre, tipo){
+        let indice = 0;
+        while(indice < this.tablaSimbolos.length) {
+            const entrada = this.tablaSimbolos[indice];
+            if(entrada.nombre === nombre && entrada.tipo === tipo) {
+                return true;
+            }
+            indice += 1;
+        }
+        return false;
+    }
+
+    //* Obtiene una entrada de la tabla
+//* nombre: identificador a buscar
+//* tipo: tipo de símbolo
+    obtenerDeLaTabla(nombre, tipo){
+        let indice = 0;
+        while(indice < this.tablaSimbolos.length) {
+            const entrada = this.tablaSimbolos[indice];
+            if(entrada.nombre === nombre && entrada.tipo === tipo) {
+                return entrada;
+            }
+            indice += 1;
+        }
+        return null;
     }
 
     validarSentencias(sentencias) {
@@ -178,11 +217,12 @@ class AnalizadorSemanticoEstilos {
                 this.agregarError(`Un estilo no puede extenderse a sí mismo: ${estilo.selector}`);
             }
 
-            if (typeof estilo.extiende === 'string' && estilo.extiende.indexOf('$') === -1) {
-                if (!this.selectoresDeclarados[estilo.extiende]) {
-                    this.agregarError(`El estilo base no existe para extiende: ${estilo.extiende}`);
+           if(typeof estilo.extiende === 'string' && estilo.extiende.indexOf('$') === -1) {
+                if (!this.existeEnTabla(estilo.extiende, 'selector')) {
+                    this.agregarError(`Selector no declarado en extiende: ${String(estilo.extiende)}`);
                 }
-            }
+            
+           }
         }
 
         if (!Array.isArray(estilo.propiedades)) {
@@ -395,6 +435,13 @@ class AnalizadorSemanticoEstilos {
                 return null;
             }
             return left / right;
+        }
+        if(expr.op === '%'){
+            if (right === 0) {
+                this.agregarError(`Módulo entre cero en ${contexto}`);
+                return null;
+            }
+            return left % right;
         }
 
         this.agregarError(`Operador inválido en ${contexto}`);
