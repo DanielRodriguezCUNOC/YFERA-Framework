@@ -146,9 +146,13 @@ programa
 
 componente
   : COMPONENTE PARENTESIS_ABRE PARENTESIS_CIERRA LLAVE_ABRE lista_elementos LLAVE_CIERRA
-    { $$ = { tipo: 'componente', parametros: [], elementos: $5 }; }
+    { $$ = { tipo: 'componente', nombre: 'ComponenteAnonimo', parametros: [], elementos: $5 }; }
   | COMPONENTE PARENTESIS_ABRE lista_parametros PARENTESIS_CIERRA LLAVE_ABRE lista_elementos LLAVE_CIERRA
-    { $$ = { tipo: 'componente', parametros: $3, elementos: $6 }; }
+    { $$ = { tipo: 'componente', nombre: 'ComponenteAnonimo', parametros: $3, elementos: $6 }; }
+  | IDENTIFICADOR PARENTESIS_ABRE PARENTESIS_CIERRA LLAVE_ABRE lista_elementos LLAVE_CIERRA
+    { $$ = { tipo: 'componente', nombre: $1, parametros: [], elementos: $5 }; }
+  | IDENTIFICADOR PARENTESIS_ABRE lista_parametros PARENTESIS_CIERRA LLAVE_ABRE lista_elementos LLAVE_CIERRA
+    { $$ = { tipo: 'componente', nombre: $1, parametros: $3, elementos: $6 }; }
   | COMPONENTE error LLAVE_CIERRA {
       registrarErrorSintacticoActual('Declaracion de componente invalida');
       yyerrok;

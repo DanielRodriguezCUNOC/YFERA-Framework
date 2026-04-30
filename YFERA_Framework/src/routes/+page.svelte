@@ -21,8 +21,9 @@
     guardarEstadoDeInterfaz,
     renombrarNodo,
   } from "$lib/arbol/arbol.service.js";
-  import { obtenerPrimerNodoArchivo } from "$lib/arbol/arbol.selector.js";
+  import { obtenerPrimerNodoArchivo, extraerTodosLosArchivos } from "$lib/arbol/arbol.selector.js";
   import { TIPO_NODO } from "$lib/arbol/arbol.types.js";
+  import { compilador } from "$lib/gramatica/compilador-maestro";
 
   let arbol = $state(arbolInicial);
   let idsCarpetasExpandidas = $state(new Set(idsCarpetasIniciales));
@@ -643,6 +644,46 @@
   function clearConsole() {
     historialConsola = [{ clase: "system", text: "Consola limpiada." }];
   }
+
+  async function compileProject() {
+    historialConsola = [
+      ...historialConsola,
+      { clase: "system", text: "Iniciando compilación del proyecto..." },
+    ];
+
+    // Implementar mapeo de código desde el árbol de archivos hacia el compilador
+    const fuentes = extraerTodosLosArchivos(arbol);
+    const resultados = await compilador.compilar(fuentes);
+
+    if (resultados.ok) {
+      historialConsola = [
+        ...historialConsola,
+        { clase: "system", text: "Compilación completada" },
+      ];
+      if (resultados.css) {
+        historialConsola = [
+          ...historialConsola,
+          {
+            clase: "output",
+            text: `CSS Generado:\n${resultados.css.substring(0, 100)}${resultados.css.length > 100 ? "..." : ""}`,
+          },
+        ];
+      }
+    } else {
+      let i = 0;
+      while (i < resultados.errores.length) {
+        const err = resultados.errores[i];
+        historialConsola = [
+          ...historialConsola,
+          {
+            clase: "error",
+            text: `Error de compilación: ${err.mensaje ?? err}`,
+          },
+        ];
+        i += 1;
+      }
+    }
+  }
 </script>
 
 <svelte:window
@@ -658,6 +699,7 @@
     </div>
     <div class="actions">
       <button class="ghost" onclick={saveFile}>Guardar</button>
+      <button onclick={compileProject}>Compilar</button>
     </div>
   </header>
 
