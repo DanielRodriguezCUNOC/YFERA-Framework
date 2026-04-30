@@ -1,4 +1,10 @@
 import { compilarEstilos } from './generador/estilos/compilar-estilos.js';
+import { generadorComponentes } from './generador/componentes/generar-componentes.js';
+import { analizarComponentes } from './semantica/semantic-components.js';
+import { analizarDB } from './semantica/semantic-db.js';
+import { generadorDB } from './generador/db/generar-db.js';
+import { analizarPrincipal } from './semantica/semantic-principal.js';
+import { generadorLogica } from './generador/logica/generar-logica.js';
 // Parsers generados
 import stylesParser from './lexer-parser/grammar-styles.js';
 import componentsParser from './lexer-parser/grammar-components.js';
@@ -48,6 +54,72 @@ class CompiladorMaestro {
           resultados.css = resEstilos.css;
         } else {
           this.errores.push(...resEstilos.errores);
+        }
+      }
+
+      //Compilar Componentes
+      let astComponentesGlobal = [];
+      for (const fileName of componentsFiles) {
+        try {
+          const ast = componentsParser.parse(fuentes[fileName]);
+          if (Array.isArray(ast)) {
+            astComponentesGlobal.push(...ast);
+          }
+        } catch (e) {
+          this.errores.push({ tipo: 'parser_componentes', archivo: fileName, mensaje: e.message });
+        }
+      }
+
+      if (astComponentesGlobal.length > 0) {
+        // Análisis Semántico de Componentes
+        const resSemantico = analizarComponentes(astComponentesGlobal);
+        if (!resSemantico.ok) {
+          this.errores.push(...resSemantico.errores);
+        } else {
+          simbolosCruzados.componentes = resSemantico.tablaSimbolos;
+          resultados.js += generadorComponentes.generar(astComponentesGlobal) + '\n';
+        }
+      }
+
+      // Compilar Base de Datos
+      let astDBGlobal = [];
+      const dbFiles = Object.keys(fuentes).filter(name => name.endsWith('.db') || name.endsWith('.sqlite'));
+      for (const fileName of dbFiles) {
+        try {
+          const ast = dbParser.parse(fuentes[fileName]);
+          if (Array.isArray(ast)) astDBGlobal.push(...ast);
+        } catch (e) {
+          this.errores.push({ tipo: 'parser_db', archivo: fileName, mensaje: e.message });
+        }
+      }
+
+      if (astDBGlobal.length > 0) {
+        const resSemDB = analizarDB(astDBGlobal);
+        if (!resSemDB.ok) {
+          this.errores.push(...resSemDB.errores);
+        } else {
+          simbolosCruzados.tablas = resSemDB.tablaSimbolos;
+          resultados.js += generadorDB.generar(astDBGlobal) + '\n';
+        }
+      }
+
+      // Compilar Lógica Principal
+      let astPrincipalGlobal = [];
+      for (const fileName of principalFiles) {
+        try {
+          const ast = principalParser.parse(fuentes[fileName]);
+          if (Array.isArray(ast)) astPrincipalGlobal.push(...ast);
+        } catch (e) {
+          this.errores.push({ tipo: 'parser_principal', archivo: fileName, mensaje: e.message });
+        }
+      }
+
+      if (astPrincipalGlobal.length > 0) {
+        const resSemPrinc = analizarPrincipal(astPrincipalGlobal, simbolosCruzados);
+        if (!resSemPrinc.ok) {
+          this.errores.push(...resSemPrinc.errores);
+        } else {
+          resultados.js += generadorLogica.generar(astPrincipalGlobal) + '\n';
         }
       }
 
