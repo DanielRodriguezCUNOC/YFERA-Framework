@@ -24,6 +24,7 @@
   import { obtenerPrimerNodoArchivo, extraerTodosLosArchivos } from "$lib/arbol/arbol.selector.js";
   import { TIPO_NODO } from "$lib/arbol/arbol.types.js";
   import { compilador } from "$lib/gramatica/compilador-maestro";
+  import JSZip from "jszip";
 
   let arbol = $state(arbolInicial);
   let idsCarpetasExpandidas = $state(new Set(idsCarpetasIniciales));
@@ -56,6 +57,9 @@
     y: 0,
     nodo: null,
   });
+
+  let erroresCompilacion = $state([]);
+  let resultadosUltimaCompilacion = $state(null);
 
   function construirPestanasAbiertas() {
     const pestanas = [];
@@ -654,6 +658,9 @@
     // Implementar mapeo de código desde el árbol de archivos hacia el compilador
     const fuentes = extraerTodosLosArchivos(arbol);
     const resultados = await compilador.compilar(fuentes);
+    
+    resultadosUltimaCompilacion = resultados;
+    erroresCompilacion = resultados.errores || [];
 
     if (resultados.ok) {
       historialConsola = [
@@ -684,6 +691,87 @@
       }
     }
   }
+
+  async function exportProject() {
+    if (!resultadosUltimaCompilacion || !resultadosUltimaCompilacion.ok) {
+      alert("Primero debes realizar una compilación exitosa.");
+      return;
+    }
+
+    const zip = new JSZip();
+    const res = resultadosUltimaCompilacion;
+
+    // Crear index.html
+    const indexHtml = compilador.generarBundle(res);
+    zip.file("index.html", indexHtml);
+
+    // Crear carpetas y archivos individuales
+    zip.file("styles.css", res.css || "");
+    zip.file("app.js", res.js || "");
+
+    // Añadir respaldo del código fuente (.yfera)
+    const backupData = JSON.stringify({
+      nombre: nombreProyecto,
+      arbol: arbol
+    }, null, 2);
+    zip.file(`${nombreProyecto.replace(/\s+/g, "_")}.yfera`, backupData);
+
+    const content = await zip.generateAsync({ type: "blob" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(content);
+    link.download = `${nombreProyecto.replace(/\s+/g, "_")}_export.zip`;
+    link.click();
+
+    historialConsola = [
+      ...historialConsola,
+      { clase: "system", text: "Proyecto exportado exitosamente como .zip" },
+    ];
+  }
+
+  function exportProjectState() {
+    const data = JSON.stringify({
+      nombre: nombreProyecto,
+      arbol: arbol
+    }, null, 2);
+    
+    const blob = new Blob([data], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${nombreProyecto.replace(/\s+/g, "_")}.yfera`;
+    link.click();
+
+    historialConsola = [
+      ...historialConsola,
+      { clase: "system", text: "Copia de seguridad (.yfera) generada y descargada." },
+    ];
+  }
+
+  function handleImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.arbol) {
+          arbol = data.arbol;
+          if (data.nombre) nombreProyecto = data.nombre;
+          historialConsola = [
+            ...historialConsola,
+            { clase: "system", text: `Proyecto "${nombreProyecto}" cargado con éxito.` },
+          ];
+        } else {
+          alert("Archivo .yfera inválido.");
+        }
+      } catch (err) {
+        alert("Error al parsear el archivo JSON.");
+      }
+    };
+    reader.readAsText(file);
+    // Limpiar input para permitir cargar el mismo archivo dos veces si se desea (No se porque el usuario quiera hacer eso)
+    event.target.value = "";
+  }
 </script>
 
 <svelte:window
@@ -699,6 +787,12 @@
     </div>
     <div class="actions">
       <button class="ghost" onclick={saveFile}>Guardar</button>
+      <label class="ghost btn-label">
+        Importar (.yfera)
+        <input type="file" accept=".yfera" onchange={handleImport} hidden />
+      </label>
+      <button class="ghost" onclick={exportProjectState}>Respaldar (.yfera)</button>
+      <button class="ghost" onclick={exportProject}>Exportar (ZIP)</button>
       <button onclick={compileProject}>Compilar</button>
     </div>
   </header>
@@ -720,6 +814,7 @@
 
       <PanelConsola
         {historialConsola}
+        errores={erroresCompilacion}
         {entradaConsola}
         {conexionActiva}
         alCambiarEntrada={(value) => (entradaConsola = value)}
@@ -906,6 +1001,26 @@
   .actions {
     display: flex;
     gap: 0.5rem;
+    align-items: center;
+  }
+
+  .btn-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.52rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid #4c5965;
+    color: #f7b97a;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-label:hover {
+    background: rgba(247, 185, 122, 0.1);
+    border-color: #f7b97a;
   }
 
   .statusbar {

@@ -19,6 +19,7 @@
 	},
 	"dependencies": {
 		"dexie": "^4.4.2",
+		"jszip": "^3.10.1",
 		"sql.js": "^1.14.1"
 	}
 }

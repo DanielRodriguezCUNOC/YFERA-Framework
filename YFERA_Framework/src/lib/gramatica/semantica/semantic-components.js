@@ -1,5 +1,5 @@
-/*
-* Analizador semántico para los componentes de YFERA.
+/**
+ * Analizador semántico para los componentes de YFERA.
  */
 
 class AnalizadorSemanticoComponentes {
@@ -16,10 +16,6 @@ class AnalizadorSemanticoComponentes {
     });
   }
 
-  /**
-   * Punto de entrada para el análisis semántico.
-   * @param {Array} ast - AST de componentes.
-   */
   analizar(ast) {
     this.errores = [];
     this.tablaSimbolos = [];
@@ -29,10 +25,10 @@ class AnalizadorSemanticoComponentes {
       return { ok: false, errores: this.errores, tablaSimbolos: [] };
     }
 
-    // Recolectar nombres de componentes
+    // Recolectar componentes 
     this.recolectarComponentes(ast);
 
-    // Validar cuerpos de componentes
+    // Validar cuerpos
     this.validarCuerpos(ast);
 
     return {
@@ -42,20 +38,16 @@ class AnalizadorSemanticoComponentes {
     };
   }
 
-  /**
-   * Registra los componentes en la tabla de símbolos.
-   */
   recolectarComponentes(ast) {
     let i = 0;
     while (i < ast.length) {
       const nodo = ast[i];
       if (nodo.tipo === 'componente') {
         const nombre = nodo.nombre;
-
-        if (this.existeEnTabla(nombre, 'componente', 'global')) {
+        if (this.existeEnTabla(nombre, 'componente')) {
           this.agregarError(`Componente duplicado: ${nombre}`);
         } else {
-          this.registrarEnTabla(nombre, 'componente', 'global', {
+          this.registrarEnTabla(nombre, 'componente', {
             parametros: nodo.parametros || []
           });
         }
@@ -64,9 +56,6 @@ class AnalizadorSemanticoComponentes {
     }
   }
 
-  /**
-   * Valida el uso de variables y tipos dentro de los componentes.
-   */
   validarCuerpos(ast) {
     let i = 0;
     while (i < ast.length) {
@@ -79,121 +68,95 @@ class AnalizadorSemanticoComponentes {
   }
 
   analizarComponente(comp) {
-    const ambito = comp.nombre;
-
-    // Registrar parámetros en el ámbito del componente
     let p = 0;
     const params = comp.parametros || [];
     while (p < params.length) {
-      const param = params[p]; // { tipo, id }
-      this.registrarEnTabla(param.id, 'variable', ambito, { tipoDato: param.tipo });
+      const param = params[p];
+      if (!this.existeEnTabla(param.id, 'variable')) {
+        this.registrarEnTabla(param.id, 'variable', { tipoDato: param.tipo });
+      }
       p += 1;
     }
 
-    // Validar elementos interiores
-    this.validarElementos(comp.elementos, ambito);
+    this.validarElementos(comp.elementos);
   }
 
-  validarElementos(elementos, ambito) {
+  validarElementos(elementos) {
     let e = 0;
     while (e < elementos.length) {
       const el = elementos[e];
-      this.validarElemento(el, ambito);
+      this.validarElemento(el);
       e += 1;
     }
   }
 
-  validarElemento(nodo, ambito) {
+  validarElemento(nodo) {
     if (!nodo) return;
 
     switch (nodo.tipo) {
       case 'seccion':
-        this.validarElementos(nodo.elementos, ambito);
-        break;
-
-      case 'texto':
-        // Si el texto usa una variable (ej: text(variable)), validar que exista
+        this.validarElementos(nodo.elementos);
         break;
 
       case 'if':
-        this.validarExpresion(nodo.condicion, ambito);
-        this.validarElementos(nodo.cuerpo, ambito);
+        this.validarExpresion(nodo.condicion);
+        this.validarElementos(nodo.cuerpo);
         if (nodo.else) {
-          this.validarElementos(nodo.else.cuerpo, ambito);
+          this.validarElementos(nodo.else.cuerpo);
         }
         break;
 
       case 'for':
-        // El for declara una variable local
         const idVar = nodo.variable;
-        this.registrarEnTabla(idVar, 'variable', `for_${idVar}`, { tipoDato: 'int' });
-        this.validarExpresion(nodo.desde, ambito);
-        this.validarExpresion(nodo.hasta, ambito);
-        this.validarElementos(nodo.cuerpo, `for_${idVar}`);
+        if (!this.existeEnTabla(idVar, 'variable')) {
+          this.registrarEnTabla(idVar, 'variable', { tipoDato: 'int' });
+        }
+        this.validarExpresion(nodo.desde);
+        this.validarExpresion(nodo.hasta);
+        this.validarElementos(nodo.cuerpo);
+        break;
+
+      case 'declaracion':
+      case 'variable_decl':
+        this.agregarError(`Error: No se permiten declaraciones de variables dentro de componentes. Solo se permiten variables globales, gracias por su compresion :).`);
         break;
     }
   }
 
-  validarExpresion(exp, ambito) {
+  validarExpresion(exp) {
     if (!exp) return;
 
     if (exp.tipo === 'variable') {
       const nombreVar = exp.valor.replace('$', '');
-      if (!this.buscarVariable(nombreVar, ambito)) {
-        this.agregarError(`Variable no declarada: ${nombreVar} en ámbito ${ambito}`);
+      if (!this.existeEnTabla(nombreVar, 'variable')) {
+        this.agregarError(`Variable no declarada: ${nombreVar} aqui no hacemos esto :v`);
       }
     } else if (exp.op) {
-      this.validarExpresion(exp.left, ambito);
-      this.validarExpresion(exp.right, ambito);
+      this.validarExpresion(exp.left);
+      this.validarExpresion(exp.right);
     }
   }
 
-  /**
-   * Busca una variable subiendo por los ámbitos.
-   */
-  buscarVariable(nombre, ambitoActual) {
-    // Buscar en el ámbito actual
-    if (this.existeEnTabla(nombre, 'variable', ambitoActual)) return true;
+  // --- TABLA DE SÍMBOLOS PRIMITIVA ---
 
-    // Buscar en el ámbito global (si aplica)
-    if (this.existeEnTabla(nombre, 'variable', 'global')) return true;
-
-    return false;
-  }
-
-  // --- MÉTODOS DE TABLA DE SÍMBOLOS PRIMITIVA ---
-
-  registrarEnTabla(nombre, tipo, ambito, info = {}) {
+  registrarEnTabla(nombre, tipo, info = {}) {
     this.tablaSimbolos.push({
       nombre: nombre,
       tipo: tipo,
-      ambito: ambito,
       ...info
     });
   }
 
-  existeEnTabla(nombre, tipo, ambito) {
+  existeEnTabla(nombre, tipo) {
     let idx = 0;
     while (idx < this.tablaSimbolos.length) {
       const entrada = this.tablaSimbolos[idx];
-      if (entrada.nombre === nombre && entrada.tipo === tipo && entrada.ambito === ambito) {
+      if (entrada.nombre === nombre && entrada.tipo === tipo) {
         return true;
       }
       idx += 1;
     }
     return false;
-  }
-
-  obtenerEntrada(nombre, tipo, ambito) {
-    let idx = 0;
-    while (idx < this.tablaSimbolos.length) {
-      const entrada = this.tablaSimbolos[idx];
-      if (entrada.nombre === nombre && entrada.tipo === tipo && entrada.ambito === ambito) {
-        return entrada;
-      }
-      idx += 1;
-    }
-    return null;
   }
 }
 

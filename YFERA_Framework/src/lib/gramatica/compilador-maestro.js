@@ -16,6 +16,16 @@ class CompiladorMaestro {
     this.errores = [];
   }
 
+  registrarError(tipo, mensaje, extra = {}) {
+    this.errores.push({
+      tipo: tipo,
+      lexema: extra.lexema || 'N/A',
+      linea: extra.linea || '?',
+      columna: extra.columna || '?',
+      mensaje: mensaje
+    });
+  }
+
   /**
    * Compila un proyecto de YFERA completo.
    * @param {Object} fuentes - Objeto con los contenidos de los archivos (principal, estilos, componentes, db)
@@ -44,7 +54,11 @@ class CompiladorMaestro {
             astEstilosGlobal.push(...ast);
           }
         } catch (e) {
-          this.errores.push({ tipo: 'parser_estilos', archivo: fileName, mensaje: e.message });
+          this.registrarError('Sintáctico (Estilo)', e.message, { 
+            linea: e.hash?.line, 
+            columna: e.hash?.loc?.first_column,
+            lexema: e.hash?.token
+          });
         }
       }
 
@@ -66,7 +80,11 @@ class CompiladorMaestro {
             astComponentesGlobal.push(...ast);
           }
         } catch (e) {
-          this.errores.push({ tipo: 'parser_componentes', archivo: fileName, mensaje: e.message });
+          this.registrarError('Sintáctico (Componente)', e.message, { 
+            linea: e.hash?.line, 
+            columna: e.hash?.loc?.first_column,
+            lexema: e.hash?.token
+          });
         }
       }
 
@@ -89,7 +107,11 @@ class CompiladorMaestro {
           const ast = dbParser.parse(fuentes[fileName]);
           if (Array.isArray(ast)) astDBGlobal.push(...ast);
         } catch (e) {
-          this.errores.push({ tipo: 'parser_db', archivo: fileName, mensaje: e.message });
+          this.registrarError('Sintáctico (DB)', e.message, { 
+            linea: e.hash?.line, 
+            columna: e.hash?.loc?.first_column,
+            lexema: e.hash?.token
+          });
         }
       }
 
@@ -110,7 +132,11 @@ class CompiladorMaestro {
           const ast = principalParser.parse(fuentes[fileName]);
           if (Array.isArray(ast)) astPrincipalGlobal.push(...ast);
         } catch (e) {
-          this.errores.push({ tipo: 'parser_principal', archivo: fileName, mensaje: e.message });
+          this.registrarError('Sintáctico (Principal)', e.message, { 
+            linea: e.hash?.line, 
+            columna: e.hash?.loc?.first_column,
+            lexema: e.hash?.token
+          });
         }
       }
 

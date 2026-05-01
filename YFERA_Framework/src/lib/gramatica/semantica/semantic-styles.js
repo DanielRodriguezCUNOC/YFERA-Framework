@@ -106,21 +106,16 @@ class AnalizadorSemanticoEstilos {
             return;
         }
 
-        this.registrarEnTabla(selector, 'selector', 'global');
+        this.registrarEnTabla(selector, 'selector');
     }
 
-    //* Registra un símbolo en la tabla
-//* nombre: identificador del símbolo.
-//* tipo: 'selector' o 'variable'.
-//* ambito: 'global' o identificador del for
-    registrarEnTabla(nombre, tipo, ambito){
-        const entrada = {nombre, tipo, ambito};
+    //* Registra un símbolo en la tabla (Global)
+    registrarEnTabla(nombre, tipo){
+        const entrada = {nombre, tipo};
         this.tablaSimbolos.push(entrada);
     }
 
-    //* Busca si un símbolo existe en la tabla (en cualquier ámbito por ahora).
-//* nombre: identificador a buscar
-//* tipo: tipo de símbolo
+    //* Busca si un símbolo existe en la tabla.
     existeEnTabla(nombre, tipo){
         let indice = 0;
         while(indice < this.tablaSimbolos.length) {
@@ -157,7 +152,7 @@ class AnalizadorSemanticoEstilos {
             }
 
             if (s.tipo === 'estilo') {
-                this.validarEstilo(s, null);
+                this.validarEstilo(s);
             } else if (s.tipo === 'for') {
                 this.validarFor(s);
             } else {
@@ -194,11 +189,11 @@ class AnalizadorSemanticoEstilos {
         }
 
         for (let i = 0; i < nodo.estilos.length; i++) {
-            this.validarEstilo(nodo.estilos[i], nodo.variable);
+            this.validarEstilo(nodo.estilos[i]);
         }
     }
 
-    validarEstilo(estilo, variableFor) {
+    validarEstilo(estilo) {
         if (!estilo || estilo.tipo !== 'estilo') {
             this.agregarError('Nodo de estilo inválido');
             return;
@@ -244,11 +239,11 @@ class AnalizadorSemanticoEstilos {
                 propsVistas[p.propiedad] = true;
             }
 
-            this.validarPropiedad(p.propiedad, p.valor, variableFor);
+            this.validarPropiedad(p.propiedad, p.valor);
         }
     }
 
-    validarPropiedad(nombre, valor, variableFor) {
+    validarPropiedad(nombre, valor) {
         // enums
         if (nombre === 'text-align') {
             if (!(valor === 'CENTER' || valor === 'RIGHT' || valor === 'LEFT')) {
@@ -288,11 +283,11 @@ class AnalizadorSemanticoEstilos {
 
         // shorthand border
         if (
-            nombre === 'border' || nombre === 'border-left' ||
+            nombre === nombre === 'border' || nombre === 'border-left' ||
             nombre === 'border-right' || nombre === 'border-top' ||
             nombre === 'border-bottom'
         ) {
-            this.validarBordeShorthand(valor, variableFor, nombre);
+            this.validarBordeShorthand(valor, nombre);
             return;
         }
 
@@ -306,7 +301,7 @@ class AnalizadorSemanticoEstilos {
             nombre === 'margin' || nombre === 'margin-left' || nombre === 'margin-right' ||
             nombre === 'margin-top' || nombre === 'margin-bottom'
         ) {
-            this.validarMedida(valor, variableFor, nombre);
+            this.validarMedida(valor, nombre);
             return;
         }
 
@@ -316,14 +311,14 @@ class AnalizadorSemanticoEstilos {
             nombre === 'border-right-width' || nombre === 'border-top-width' ||
             nombre === 'border-bottom-width'
         ) {
-            this.validarNumeroOExpr(valor, variableFor, nombre);
+            this.validarNumeroOExpr(valor, nombre);
             return;
         }
 
         this.agregarError(`Propiedad no soportada: ${nombre}`);
     }
 
-    validarMedida(valor, variableFor, contexto) {
+    validarMedida(valor, contexto) {
         if (valor && typeof valor === 'object' && valor.tipo === 'porcentaje') {
             if (typeof valor.valor !== 'number' || !isFinite(valor.valor)) {
                 this.agregarError(`Porcentaje inválido en ${contexto}`);
@@ -335,10 +330,10 @@ class AnalizadorSemanticoEstilos {
             return;
         }
 
-        this.validarNumeroOExpr(valor, variableFor, contexto);
+        this.validarNumeroOExpr(valor, contexto);
     }
 
-    validarNumeroOExpr(valor, variableFor, contexto) {
+    validarNumeroOExpr(valor, contexto) {
         if (typeof valor === 'number') {
             if (!isFinite(valor)) {
                 this.agregarError(`Número inválido en ${contexto}`);
@@ -362,19 +357,14 @@ class AnalizadorSemanticoEstilos {
         }
 
         if (valor && typeof valor === 'object' && valor.op) {
-            this.validarExprConVariable(valor, variableFor, contexto);
+            this.validarExprConVariable(valor, contexto);
             return;
         }
 
         this.agregarError(`Valor inválido en ${contexto}`);
     }
 
-    validarExprConVariable(expr, variablePermitida, contexto) {
-        if (!variablePermitida) {
-            this.agregarError(`No se permiten expresiones fuera de for en ${contexto}`);
-            return;
-        }
-
+    validarExprConVariable(expr, contexto) {
         if (typeof expr === 'number') return;
 
         if (typeof expr === 'string' && expr.charAt(0) === '$') {
@@ -394,8 +384,8 @@ class AnalizadorSemanticoEstilos {
             return;
         }
 
-        this.validarExprConVariable(expr.left, variablePermitida, contexto);
-        this.validarExprConVariable(expr.right, variablePermitida, contexto);
+        this.validarExprConVariable(expr.left, contexto);
+        this.validarExprConVariable(expr.right, contexto);
 
         if (expr.op === '/' && typeof expr.right === 'number' && expr.right === 0) {
             this.agregarError(`División entre cero en ${contexto}`);
@@ -448,13 +438,13 @@ class AnalizadorSemanticoEstilos {
         return null;
     }
 
-    validarBordeShorthand(valor, variableFor, contexto) {
+    validarBordeShorthand(valor, contexto) {
         if (!valor || typeof valor !== 'object') {
             this.agregarError(`Valor inválido para ${contexto}`);
             return;
         }
 
-        this.validarNumeroOExpr(valor.ancho, variableFor, `${contexto}.ancho`);
+        this.validarNumeroOExpr(valor.ancho, contexto);
 
         if (!(valor.estilo === 'DOTTED' || valor.estilo === 'LINE' || valor.estilo === 'DOUBLE' || valor.estilo === 'SOLID')) {
             this.agregarError(`Estilo inválido en ${contexto}`);
