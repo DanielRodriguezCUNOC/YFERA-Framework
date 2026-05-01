@@ -1,12 +1,11 @@
-/*
+/**
  * Analizador semántico para la lógica principal de YFERA.
- * Valida variables, control de flujo y llamadas a componentes.
  */
 
 class AnalizadorSemanticoPrincipal {
   constructor(tablasSimbolosCruzadas = {}) {
     this.errores = [];
-    this.tablaSimbolos = []; // [{ nombre, tipo: 'variable', ambito, tipoDato }]
+    this.tablaSimbolos = []; // [{ nombre, tipo, tipoDato }]
     this.componentesDeclarados = tablasSimbolosCruzadas.componentes || [];
     this.tablasDeclaradas = tablasSimbolosCruzadas.tablas || [];
   }
@@ -29,7 +28,7 @@ class AnalizadorSemanticoPrincipal {
     while (i < ast.length) {
       const nodo = ast[i];
       if (nodo) {
-        this.validarSentencia(nodo, 'global');
+        this.validarSentencia(nodo, false);
       }
       i += 1;
     }
@@ -41,36 +40,50 @@ class AnalizadorSemanticoPrincipal {
     };
   }
 
-  validarSentencia(nodo, ambito) {
+  validarSentencia(nodo, enBloque) {
+    if (!nodo) return;
+
     switch (nodo.tipo) {
       case 'render':
-        this.validarRendereo(nodo.invocacion, ambito);
+        this.validarRendereo(nodo.invocacion);
         break;
 
       case 'if':
       case 'while':
-        this.validarSentencias(nodo.cuerpo, ambito);
-        if (nodo.else) this.validarSentencias(nodo.else.cuerpo, ambito);
+        // Al entrar en un cuerpo de bloque, enBloque = true
+        this.validarSentencias(nodo.cuerpo, true);
+        if (nodo.else) this.validarSentencias(nodo.else.cuerpo, true);
         break;
 
-      case 'insert_db':
-      case 'delete_db':
+      case 'variable_decl':
+        if (enBloque) {
+          this.agregarError(`Error: No se permiten declaraciones de variables dentro de bloques (${nodo.tipo}). Solo se permiten declaraciones globales.`);
+        } else {
+          const id = nodo.id;
+          if (this.existeEnTabla(id, 'variable')) {
+            this.agregarError(`Variable duplicada: ${id}`);
+          } else {
+            this.registrarEnTabla(id, 'variable', { tipoDato: nodo.tipoDato });
+          }
+        }
         break;
 
-      default:
+      case 'for':
+        // El for tiene una variable de control, pero el cuerpo no puede tener declaraciones
+        this.validarSentencias(nodo.cuerpo, true);
         break;
     }
   }
 
-  validarSentencias(nodos, ambito) {
+  validarSentencias(nodos, enBloque) {
     let i = 0;
     while (Array.isArray(nodos) && i < nodos.length) {
-      this.validarSentencia(nodos[i], ambito);
+      this.validarSentencia(nodos[i], enBloque);
       i += 1;
     }
   }
 
-  validarRendereo(invocacion, ambito) {
+  validarRendereo(invocacion) {
     const nombre = invocacion.componente;
     if (!this.existeComponente(nombre)) {
       this.agregarError(`Se intenta renderizar un componente no declarado: ${nombre}`);
@@ -86,11 +99,19 @@ class AnalizadorSemanticoPrincipal {
     return false;
   }
 
-  existeEnTabla(nombre, tipo, ambito) {
+  registrarEnTabla(nombre, tipo, info = {}) {
+    this.tablaSimbolos.push({
+      nombre: nombre,
+      tipo: tipo,
+      ...info
+    });
+  }
+
+  existeEnTabla(nombre, tipo) {
     let idx = 0;
     while (idx < this.tablaSimbolos.length) {
       const entrada = this.tablaSimbolos[idx];
-      if (entrada.nombre === nombre && entrada.tipo === tipo && entrada.ambito === ambito) {
+      if (entrada.nombre === nombre && entrada.tipo === tipo) {
         return true;
       }
       idx += 1;
