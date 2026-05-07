@@ -3,36 +3,45 @@
 */
 
 %{
-
-  const erroresLexicos = [];
-  const erroresSintacticos = [];
+  
+  var erroresLexicos = [];
+  var erroresSintacticos = [];
+  parser.erroresLexicos = erroresLexicos;
+  parser.erroresSintacticos = erroresSintacticos;
 
   function resgistrarErrorLexico(lexema, linea, columna){
     erroresLexicos.push({
       tipo: 'lexico',
-      lexema,
-      linea,
-      columna,
-      mensaje: `Token no reconocido: ${lexema}`
+      lexema: lexema,
+      linea: linea,
+      columna: columna,
+      mensaje: 'Token no reconocido: ' + lexema
     });
   }
 
   function registrarErrorSintactico(mensaje, lexema, linea, columna){
     erroresSintacticos.push({
       tipo: 'sintactico',
-      lexema,
-      linea,
-      columna,
-      mensaje
+      lexema: lexema,
+      linea: linea,
+      columna: columna,
+      mensaje: mensaje
     });
   }
 
   function registrarErrorSintacticoActual(mensaje){
-    const linea = yylloc?.first_line || yylineno || 0;
-    const columna = yylloc?.first_column ?? 0;
-    const lexema = yytext || '';
+    var linea = (typeof yylloc !== 'undefined' && yylloc) ? (yylloc.first_line || yylineno || 0) : ((typeof yylineno !== 'undefined') ? yylineno : 0);
+    var columna = (typeof yylloc !== 'undefined' && yylloc) ? (yylloc.first_column || 0) : 0;
+    var lexema = (typeof yytext !== 'undefined') ? yytext : '';
     registrarErrorSintactico(mensaje, lexema, linea, columna);
   }
+
+  parser.parseError = function(str, hash) {
+    registrarErrorSintactico(str, hash.text || hash.token, hash.line + 1, (hash.loc ? hash.loc.first_column : 0));
+    if (!hash.recoverable) {
+      throw new Error(str);
+    }
+  };
 %}
 
 %lex
@@ -43,7 +52,8 @@
 [\u200B\u200C\u200D\uFEFF\u00A0]+   /* ignorar invisibles y nbsp */
 #.*                             /* ignorar comentarios de línea */
 
-//* Palabras reservadas
+
+/* Palabras reservadas */
 
 "component"        return 'COMPONENTE';
 "int"              return 'TIPO_ENTERO';
@@ -77,7 +87,7 @@
 "false"            return 'FALSO';
 
 
-//* Simbolos
+
 "{"                return 'LLAVE_ABRE';
 "}"                return 'LLAVE_CIERRA';
 "("                return 'PARENTESIS_ABRE';
@@ -103,7 +113,7 @@
 "\""               return 'COMILLA_DOBLE';
 
 
-//* LITERALES Y VARIABLES
+
 "$"[a-zA-Z_][a-zA-Z0-9_]*          return 'VARIABLE';
 \"[^\"]*\"                         return 'CADENA';
 \'[^\']*\'                         return 'CARACTER';
@@ -111,15 +121,15 @@
 [a-zA-Z_][a-zA-Z0-9_-]*            return 'IDENTIFICADOR';
 
 
-//* OPERADORES LOGICOS
+
 "&&"               return 'AND';
 "||"               return 'OR';
 
 <<EOF>>            return 'EOF';
 
 . {
-  const linea = yylloc?.first_line || (yylineno);
-  const columna = (yylloc?.first_column ?? 0);
+  var linea = (typeof yylloc !== 'undefined' && yylloc) ? (yylloc.first_line || yylineno || 0) : ((typeof yylineno !== 'undefined') ? yylineno : 0);
+  var columna = (typeof yylloc !== 'undefined' && yylloc) ? (yylloc.first_column || 0) : 0;
   resgistrarErrorLexico(yytext, linea, columna);
 }
 

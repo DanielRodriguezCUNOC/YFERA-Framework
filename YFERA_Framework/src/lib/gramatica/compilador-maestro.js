@@ -6,10 +6,27 @@ import { generadorDB } from './generador/db/generar-db.js';
 import { analizarPrincipal } from './semantica/semantic-principal.js';
 import { generadorLogica } from './generador/logica/generar-logica.js';
 // Parsers generados
-import stylesParser from './lexer-parser/grammar-styles.js';
-import componentsParser from './lexer-parser/grammar-components.js';
-import dbParser from './lexer-parser/grammar-DB.js';
-import principalParser from './lexer-parser/principal-grammar.js';
+import { parser as stylesParser } from './lexer-parser/grammar-styles.js';
+import { parser as componentsParser } from './lexer-parser/grammar-components.js';
+import { parser as dbParser } from './lexer-parser/grammar-DB.js';
+import { parser as principalParser } from './lexer-parser/principal-grammar.js';
+
+function safeParse(parser, input) {
+  if (!parser) throw new Error('Parser no disponible');
+  
+  // Limpiar listas de errores previas
+  if (parser.erroresLexicos) parser.erroresLexicos.length = 0;
+  if (parser.erroresSintacticos) parser.erroresSintacticos.length = 0;
+
+  try {
+    parser.yy = parser.yy || {};
+    return parser.parse(input);
+  } catch (err) {
+    // Si no es un error de los que ya capturamos nosotros, lo relanzamos
+    // para que el catch del compilador lo maneje como emergencia
+    throw err;
+  }
+}
 
 class CompiladorMaestro {
   constructor() {
@@ -26,12 +43,34 @@ class CompiladorMaestro {
     });
   }
 
+  recolectarErroresParser(parser, tipoSintactico, tipoLexico) {
+    if (parser.erroresLexicos) {
+      parser.erroresLexicos.forEach(err => {
+        this.registrarError(tipoLexico, err.mensaje, {
+          linea: err.linea,
+          columna: err.columna,
+          lexema: err.lexema
+        });
+      });
+    }
+    if (parser.erroresSintacticos) {
+      parser.erroresSintacticos.forEach(err => {
+        this.registrarError(tipoSintactico, err.mensaje, {
+          linea: err.linea,
+          columna: err.columna,
+          lexema: err.lexema
+        });
+      });
+    }
+  }
+
   /**
    * Compila un proyecto de YFERA completo.
    * @param {Object} fuentes - Objeto con los contenidos de los archivos (principal, estilos, componentes, db)
    */
   async compilar(fuentes) {
     this.errores = [];
+    let simbolosCruzados = {};
     const resultados = {
       html: '',
       css: '',
@@ -49,17 +88,14 @@ class CompiladorMaestro {
       let astEstilosGlobal = [];
       for (const fileName of stylesFiles) {
         try {
-          const ast = stylesParser.parse(fuentes[fileName]);
+          const ast = safeParse(stylesParser, fuentes[fileName]);
           if (Array.isArray(ast)) {
             astEstilosGlobal.push(...ast);
           }
         } catch (e) {
-          this.registrarError('Sintáctico (Estilo)', e.message, { 
-            linea: e.hash?.line, 
-            columna: e.hash?.loc?.first_column,
-            lexema: e.hash?.token
-          });
+          // Ya se capturan en recolectarErroresParser
         }
+        this.recolectarErroresParser(stylesParser, 'Sintáctico (Estilo)', 'Léxico (Estilo)');
       }
 
       if (astEstilosGlobal.length > 0) {
@@ -75,17 +111,14 @@ class CompiladorMaestro {
       let astComponentesGlobal = [];
       for (const fileName of componentsFiles) {
         try {
-          const ast = componentsParser.parse(fuentes[fileName]);
+          const ast = safeParse(componentsParser, fuentes[fileName]);
           if (Array.isArray(ast)) {
             astComponentesGlobal.push(...ast);
           }
         } catch (e) {
-          this.registrarError('Sintáctico (Componente)', e.message, { 
-            linea: e.hash?.line, 
-            columna: e.hash?.loc?.first_column,
-            lexema: e.hash?.token
-          });
+          // Ya se capturan en recolectarErroresParser
         }
+        this.recolectarErroresParser(componentsParser, 'Sintáctico (Componente)', 'Léxico (Componente)');
       }
 
       if (astComponentesGlobal.length > 0) {
@@ -104,15 +137,12 @@ class CompiladorMaestro {
       const dbFiles = Object.keys(fuentes).filter(name => name.endsWith('.db') || name.endsWith('.sqlite'));
       for (const fileName of dbFiles) {
         try {
-          const ast = dbParser.parse(fuentes[fileName]);
+          const ast = safeParse(dbParser, fuentes[fileName]);
           if (Array.isArray(ast)) astDBGlobal.push(...ast);
         } catch (e) {
-          this.registrarError('Sintáctico (DB)', e.message, { 
-            linea: e.hash?.line, 
-            columna: e.hash?.loc?.first_column,
-            lexema: e.hash?.token
-          });
+          // Ya se capturan en recolectarErroresParser
         }
+        this.recolectarErroresParser(dbParser, 'Sintáctico (DB)', 'Léxico (DB)');
       }
 
       if (astDBGlobal.length > 0) {
@@ -129,15 +159,12 @@ class CompiladorMaestro {
       let astPrincipalGlobal = [];
       for (const fileName of principalFiles) {
         try {
-          const ast = principalParser.parse(fuentes[fileName]);
+          const ast = safeParse(principalParser, fuentes[fileName]);
           if (Array.isArray(ast)) astPrincipalGlobal.push(...ast);
         } catch (e) {
-          this.registrarError('Sintáctico (Principal)', e.message, { 
-            linea: e.hash?.line, 
-            columna: e.hash?.loc?.first_column,
-            lexema: e.hash?.token
-          });
+          // Ya se capturan en recolectarErroresParser
         }
+        this.recolectarErroresParser(principalParser, 'Sintáctico (Principal)', 'Léxico (Principal)');
       }
 
       if (astPrincipalGlobal.length > 0) {

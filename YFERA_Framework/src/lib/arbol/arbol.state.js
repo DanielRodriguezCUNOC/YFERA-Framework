@@ -24,34 +24,94 @@ export const arbolInicial = [
           {
             id: "file-estilos",
             type: "file",
-            name: "global.styles",
-            content: `base-layout {
-  width = 100%;
-  height = 100%;
-  background color = lightgray;
-  color = black;
+            name: "globales.styles",
+            content: `/* Definición de un estilo base */
+        estilo-base {
+          background color = lightgray;
+          color = black;
+          text font = SANS;
+          border = 2px solid blue;
+        }
+
+        /* Herencia de estilos */
+        boton-especial extends estilo-base {
+          color = white;
+          background color = #333333;
+          border radius = 5px;
+        }
+
+        /* Generación dinámica de clases de tamaño */
+        @for $i from 1 through 3 {
+          titulo-$i {
+            text size = $i * 12;
+            padding = 5px;
+          }
 }`,
           },
           {
             id: "file-component",
             type: "file",
-            name: "app.comp",
-            content: `AppComponent(string title){
-  [
-    <title-style>[
-      text(title)
-    ]
-  ]
+            name: "vistas.comp",
+            content: `/* Componente que recibe datos y una función */
+        component miPerfil(string nombre, int edad, function alEnviar) {
+    
+          [ /* Sección principal con estilo */
+            <estilo-base> [
+              T<titulo-2>("Bienvenido, $nombre")
+            
+              /* Uso de lógica If para mostrar mensajes */
+              if ($edad >= 18) {
+                T("Eres mayor de edad")
+              } else {
+                T("Eres menor de edad")
+              }
+
+              /* Formulario integrado */
+              FORM<boton-especial> {
+                INPUT_TEXT(id: "nuevo_nombre", label: "Cambiar nombre", value: "$nombre")
+                INPUT_NUMBER(id: "nueva_edad", label: "Tu edad", value: $edad)
+                
+                SUBMIT {
+                  label: "Actualizar Datos"
+                  function: $alEnviar(@nuevo_nombre, @nueva_edad)
+                }
+              }
+            ]
+          ]
 }`,
           },
           {
             id: "file-view",
             type: "file",
             name: "main.y",
-            content: `import "./global.styles";
-import "./app.comp";
+            content: `/* Imports de archivos externos */
+        import "./globales.styles";
+        import "./vistas.comp";
 
-render AppComponent("YFERA");`,
+        /* Variables globales */
+        int contador = 0;
+        string usuarioActivo = "Invitado";
+
+        /* Función de lógica que interactúa con DB */
+        function guardarCambios(string nom, int ed) {
+          # Ejecuta comando SQL en SQLite interno
+          execute \`usuarios[nombre=$nom, edad=$ed] IN 1\`;
+    
+          # Recarga la vista actual
+          load "./main.y";
+        }
+
+        /* Punto de entrada principal */
+        main {
+          # Llamada al componente usando el decorador @
+          @miPerfil(usuarioActivo, 25, $guardarCambios);
+
+          # Ciclo para mostrar múltiples elementos
+          while (contador < 3) {
+            T("Iteración del sistema: $contador");
+            contador = contador + 1;
+          }
+}`,
           },
         ],
       },
