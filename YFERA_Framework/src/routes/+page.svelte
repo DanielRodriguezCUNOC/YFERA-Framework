@@ -772,6 +772,14 @@
     // Limpiar input para permitir cargar el mismo archivo dos veces si se desea (No se porque el usuario quiera hacer eso)
     event.target.value = "";
   }
+
+  let editorComponent;
+
+  function handleColorSelect(color) {
+    if (editorComponent && editorComponent.insertAtCursor) {
+      editorComponent.insertAtCursor(color);
+    }
+  }
 </script>
 
 <svelte:window
@@ -807,6 +815,7 @@
       />
 
       <PanelEditor
+        bind:this={editorComponent}
         contenido={contenidoEditor}
         {lineas}
         alCambiarContenido={(value) => (contenidoEditor = value)}
@@ -833,6 +842,7 @@
       alCrearCarpeta={crearNuevaCarpeta}
       alCrearArchivo={crearNuevoArchivo}
       alAbrirMenuContextual={abrirMenuContextual}
+      alSeleccionarColor={handleColorSelect}
     />
   </div>
 

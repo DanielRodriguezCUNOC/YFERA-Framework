@@ -1,5 +1,6 @@
 <script>
 	import NodoArbol from "./NodoArbol.svelte";
+	import ColorPicker from "../util/ColorPicker.svelte";
 
 	let {
 		arbol,
@@ -10,6 +11,7 @@
 		alCrearCarpeta,
 		alCrearArchivo,
 		alAbrirMenuContextual,
+		alSeleccionarColor,
 	} = $props();
 </script>
 
@@ -35,6 +37,8 @@
 			/>
 		{/each}
 	</ul>
+
+	<ColorPicker {alSeleccionarColor} />
 </aside>
 
 <style>
