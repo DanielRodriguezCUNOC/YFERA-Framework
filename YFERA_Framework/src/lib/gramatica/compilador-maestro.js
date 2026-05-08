@@ -83,7 +83,7 @@ class CompiladorMaestro {
           importaciones.push(ruta);
           index = comillaFinal + 1;
         } else {
-          index = comillaInicial + 1; 
+          index = comillaInicial + 1;
         }
       } else {
         index = importIndex + 'import'.length;
@@ -93,13 +93,13 @@ class CompiladorMaestro {
   }
 
   procesarDependencia(rutaActual, fuentes, listaOrdenada, pilaRutas, yaProcesados) {
-    // PASO A: Validación de Seguridad
+    // Primero se hace la validación de seguridad, esto para evitar referencias circulares
     if (pilaRutas.indexOf(rutaActual) !== -1) {
       this.registrarError('Dependencia', 'Referencia circular detectada', { lexema: rutaActual });
       return;
     }
     if (yaProcesados.indexOf(rutaActual) !== -1) {
-      return; // Ya fue procesado
+      return; // Ya fue procesado 
     }
 
     let contenido = fuentes[rutaActual];
@@ -108,19 +108,18 @@ class CompiladorMaestro {
       return;
     }
 
-    // PASO B: Registro de Entrada
+    // Ahora se hace el registro de entrada
     pilaRutas.push(rutaActual);
 
-    // PASO C: Escaneo de Imports
+    // Ahora se hace el escaneo de imports
     let importaciones = this.extraerImportaciones(contenido);
 
-    // PASO D: Descenso Recursivo
+    // Ahora se hace el descenso recursivo
     for (let i = 0; i < importaciones.length; i++) {
       let rutaHija = importaciones[i];
       let rutaAbsolutaHija = rutaHija; // En caso simplificado, asume que es el nombre exacto
 
-      // Aquí puedes agregar lógica si "rutaHija" es relativa o quitar "./", etc.
-      // Ejemplo básico de limpieza:
+      // Se hace la limpieza de la ruta
       if (rutaAbsolutaHija.startsWith('./')) {
         rutaAbsolutaHija = rutaAbsolutaHija.substring(2);
       }
@@ -128,9 +127,9 @@ class CompiladorMaestro {
       this.procesarDependencia(rutaAbsolutaHija, fuentes, listaOrdenada, pilaRutas, yaProcesados);
     }
 
-    // PASO E: Registro de Salida (Aplanamiento)
-    pilaRutas.pop(); // Remove it from stack since we are done with its children
-    yaProcesados.push(rutaActual);
+    // Ahora se hace el registro de salida
+    pilaRutas.pop(); // Se elimina de la pila de rutas
+    yaProcesados.push(rutaActual); // Se agrega a la lista de ya procesados
 
     let extension = '';
     let puntoIndex = rutaActual.lastIndexOf('.');
@@ -165,7 +164,7 @@ class CompiladorMaestro {
       let yaProcesados = [];
       let llavesFuentes = Object.keys(fuentes);
 
-      // RESOLUCIÓN: Ejecutar algoritmo DFS
+      // Ejecutar algoritmo DFS
       for (let i = 0; i < llavesFuentes.length; i++) {
         this.procesarDependencia(llavesFuentes[i], fuentes, listaOrdenada, pilaRutas, yaProcesados);
       }
@@ -229,8 +228,8 @@ class CompiladorMaestro {
         }
       }
 
-      // Evaluar las fases de generación (Sintaxis validada)
-      
+      // Evaluar las fases de generación
+
       // Estilos
       if (astEstilosGlobal.length > 0) {
         const resEstilos = compilarEstilos(astEstilosGlobal);
@@ -242,7 +241,7 @@ class CompiladorMaestro {
           }
         }
       }
-      
+
       // Base de Datos
       if (astDBGlobal.length > 0) {
         const resSemDB = analizarDB(astDBGlobal);
