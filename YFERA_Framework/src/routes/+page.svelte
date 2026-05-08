@@ -438,12 +438,7 @@
     try {
       const resultado = await eliminarNodo(idProyecto, menuContextual.nodo.id);
       arbol = resultado.arbol;
-      idsPestanasAbiertas = [];
-      let indice = 0;
-      while (indice < resultado.pestanas.length) {
-        idsPestanasAbiertas.push(resultado.pestanas[indice].nodoId);
-        indice += 1;
-      }
+      idsPestanasAbiertas = resultado.pestanas.map((pestana) => pestana.nodoId);
 
       idsCarpetasExpandidas = new Set(
         [...idsCarpetasExpandidas].filter((idCarpeta) => {
