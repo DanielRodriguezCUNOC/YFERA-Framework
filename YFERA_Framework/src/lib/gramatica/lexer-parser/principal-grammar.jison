@@ -297,11 +297,6 @@ sentencia_main
     { $$ = $1; }
   | condicional
     { $$ = $1; }
-  | error PUNTO_COMA {
-      registrarErrorSintacticoActual('Sentencia principal invalida');
-      yyerrok;
-      $$ = null;
-    }
   ;
 
 invocacion_componente
