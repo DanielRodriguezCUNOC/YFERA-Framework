@@ -335,7 +335,7 @@ export async function eliminarNodo(proyectoId, nodoId) {
 		nodoActivoId = primerArchivo ? primerArchivo.id : null;
 	}
 
-	await guardarEstadoDeInterfaz({
+	await guardarEstadoInterfaz({
 		id: `${CLAVE_ESTADO_INTERFAZ}-${proyectoId}`,
 		proyectoId,
 		nodoActivoId,

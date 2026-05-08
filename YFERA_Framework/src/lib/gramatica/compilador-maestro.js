@@ -13,7 +13,7 @@ import { parser as principalParser } from './lexer-parser/principal-grammar.js';
 
 function safeParse(parser, input) {
   if (!parser) throw new Error('Parser no disponible');
-  
+
   // Limpiar listas de errores previas
   if (parser.erroresLexicos) parser.erroresLexicos.length = 0;
   if (parser.erroresSintacticos) parser.erroresSintacticos.length = 0;
@@ -22,8 +22,8 @@ function safeParse(parser, input) {
     parser.yy = parser.yy || {};
     return parser.parse(input);
   } catch (err) {
-    // Si no es un error de los que ya capturamos nosotros, lo relanzamos
-    // para que el catch del compilador lo maneje como emergencia
+    // Si no es un error de los que ya capturamos, lo relanzamos
+    // para que el catch del compilador lo maneje como emergencia 
     throw err;
   }
 }
@@ -64,9 +64,90 @@ class CompiladorMaestro {
     }
   }
 
+  extraerImportaciones(contenido) {
+    let importaciones = [];
+    if (!contenido) return importaciones;
+
+    let index = 0;
+    while (true) {
+      let importIndex = contenido.indexOf('import', index);
+      if (importIndex === -1) {
+        break;
+      }
+
+      let comillaInicial = contenido.indexOf('"', importIndex);
+      if (comillaInicial !== -1) {
+        let comillaFinal = contenido.indexOf('"', comillaInicial + 1);
+        if (comillaFinal !== -1) {
+          let ruta = contenido.substring(comillaInicial + 1, comillaFinal);
+          importaciones.push(ruta);
+          index = comillaFinal + 1;
+        } else {
+          index = comillaInicial + 1; 
+        }
+      } else {
+        index = importIndex + 'import'.length;
+      }
+    }
+    return importaciones;
+  }
+
+  procesarDependencia(rutaActual, fuentes, listaOrdenada, pilaRutas, yaProcesados) {
+    // PASO A: Validación de Seguridad
+    if (pilaRutas.indexOf(rutaActual) !== -1) {
+      this.registrarError('Dependencia', 'Referencia circular detectada', { lexema: rutaActual });
+      return;
+    }
+    if (yaProcesados.indexOf(rutaActual) !== -1) {
+      return; // Ya fue procesado
+    }
+
+    let contenido = fuentes[rutaActual];
+    if (contenido === undefined || contenido === null) {
+      this.registrarError('Dependencia', 'Archivo no encontrado', { lexema: rutaActual });
+      return;
+    }
+
+    // PASO B: Registro de Entrada
+    pilaRutas.push(rutaActual);
+
+    // PASO C: Escaneo de Imports
+    let importaciones = this.extraerImportaciones(contenido);
+
+    // PASO D: Descenso Recursivo
+    for (let i = 0; i < importaciones.length; i++) {
+      let rutaHija = importaciones[i];
+      let rutaAbsolutaHija = rutaHija; // En caso simplificado, asume que es el nombre exacto
+
+      // Aquí puedes agregar lógica si "rutaHija" es relativa o quitar "./", etc.
+      // Ejemplo básico de limpieza:
+      if (rutaAbsolutaHija.startsWith('./')) {
+        rutaAbsolutaHija = rutaAbsolutaHija.substring(2);
+      }
+
+      this.procesarDependencia(rutaAbsolutaHija, fuentes, listaOrdenada, pilaRutas, yaProcesados);
+    }
+
+    // PASO E: Registro de Salida (Aplanamiento)
+    pilaRutas.pop(); // Remove it from stack since we are done with its children
+    yaProcesados.push(rutaActual);
+
+    let extension = '';
+    let puntoIndex = rutaActual.lastIndexOf('.');
+    if (puntoIndex !== -1) {
+      extension = rutaActual.substring(puntoIndex);
+    }
+
+    listaOrdenada.push({
+      ruta: rutaActual,
+      contenido: contenido,
+      tipo: extension
+    });
+  }
+
   /**
    * Compila un proyecto de YFERA completo.
-   * @param {Object} fuentes - Objeto con los contenidos de los archivos (principal, estilos, componentes, db)
+   * @param {Object} fuentes - Objeto con los contenidos de los archivos
    */
   async compilar(fuentes) {
     this.errores = [];
@@ -79,98 +160,123 @@ class CompiladorMaestro {
     };
 
     try {
-      // Identificar archivos relevantes
-      const stylesFiles = Object.keys(fuentes).filter(name => name.endsWith('.styles') || name.endsWith('.style'));
-      const componentsFiles = Object.keys(fuentes).filter(name => name.endsWith('.comp'));
-      const principalFiles = Object.keys(fuentes).filter(name => name.endsWith('.y') || name.endsWith('.principal'));
+      let listaOrdenada = [];
+      let pilaRutas = [];
+      let yaProcesados = [];
+      let llavesFuentes = Object.keys(fuentes);
 
-      // Compilar Estilos
-      let astEstilosGlobal = [];
-      for (const fileName of stylesFiles) {
-        try {
-          const ast = safeParse(stylesParser, fuentes[fileName]);
-          if (Array.isArray(ast)) {
-            astEstilosGlobal.push(...ast);
-          }
-        } catch (e) {
-          // Ya se capturan en recolectarErroresParser
-        }
-        this.recolectarErroresParser(stylesParser, 'Sintáctico (Estilo)', 'Léxico (Estilo)');
+      // RESOLUCIÓN: Ejecutar algoritmo DFS
+      for (let i = 0; i < llavesFuentes.length; i++) {
+        this.procesarDependencia(llavesFuentes[i], fuentes, listaOrdenada, pilaRutas, yaProcesados);
       }
 
+      let astEstilosGlobal = [];
+      let astComponentesGlobal = [];
+      let astDBGlobal = [];
+      let astPrincipalGlobal = [];
+
+      // COMPILACIÓN EN CASCADA
+      for (let i = 0; i < listaOrdenada.length; i++) {
+        let archivo = listaOrdenada[i];
+        let tipo = archivo.tipo;
+        let ruta = archivo.ruta;
+        let contenido = archivo.contenido;
+
+        if (tipo === '.styles' || tipo === '.style') {
+          try {
+            const ast = safeParse(stylesParser, contenido);
+            if (Array.isArray(ast)) {
+              for (let j = 0; j < ast.length; j++) {
+                astEstilosGlobal.push(ast[j]);
+              }
+            }
+          } catch (e) {
+          }
+          this.recolectarErroresParser(stylesParser, 'Sintáctico (Estilo)', 'Léxico (Estilo)');
+        } else if (tipo === '.comp') {
+          try {
+            const ast = safeParse(componentsParser, contenido);
+            if (Array.isArray(ast)) {
+              for (let j = 0; j < ast.length; j++) {
+                astComponentesGlobal.push(ast[j]);
+              }
+            }
+          } catch (e) {
+          }
+          this.recolectarErroresParser(componentsParser, 'Sintáctico (Componente)', 'Léxico (Componente)');
+        } else if (tipo === '.db' || tipo === '.sqlite') {
+          try {
+            const ast = safeParse(dbParser, contenido);
+            if (Array.isArray(ast)) {
+              for (let j = 0; j < ast.length; j++) {
+                astDBGlobal.push(ast[j]);
+              }
+            }
+          } catch (e) {
+          }
+          this.recolectarErroresParser(dbParser, 'Sintáctico (DB)', 'Léxico (DB)');
+        } else if (tipo === '.y' || tipo === '.principal') {
+          try {
+            const ast = safeParse(principalParser, contenido);
+            if (Array.isArray(ast)) {
+              for (let j = 0; j < ast.length; j++) {
+                astPrincipalGlobal.push(ast[j]);
+              }
+            }
+          } catch (e) {
+          }
+          this.recolectarErroresParser(principalParser, 'Sintáctico (Principal)', 'Léxico (Principal)');
+        }
+      }
+
+      // Evaluar las fases de generación (Sintaxis validada)
+      
+      // Estilos
       if (astEstilosGlobal.length > 0) {
         const resEstilos = compilarEstilos(astEstilosGlobal);
         if (resEstilos.ok) {
           resultados.css = resEstilos.css;
         } else {
-          this.errores.push(...resEstilos.errores);
-        }
-      }
-
-      //Compilar Componentes
-      let astComponentesGlobal = [];
-      for (const fileName of componentsFiles) {
-        try {
-          const ast = safeParse(componentsParser, fuentes[fileName]);
-          if (Array.isArray(ast)) {
-            astComponentesGlobal.push(...ast);
+          for (let i = 0; i < resEstilos.errores.length; i++) {
+            this.errores.push(resEstilos.errores[i]);
           }
-        } catch (e) {
-          // Ya se capturan en recolectarErroresParser
-        }
-        this.recolectarErroresParser(componentsParser, 'Sintáctico (Componente)', 'Léxico (Componente)');
-      }
-
-      if (astComponentesGlobal.length > 0) {
-        // Análisis Semántico de Componentes
-        const resSemantico = analizarComponentes(astComponentesGlobal);
-        if (!resSemantico.ok) {
-          this.errores.push(...resSemantico.errores);
-        } else {
-          simbolosCruzados.componentes = resSemantico.tablaSimbolos;
-          resultados.js += generadorComponentes.generar(astComponentesGlobal) + '\n';
         }
       }
-
-      // Compilar Base de Datos
-      let astDBGlobal = [];
-      const dbFiles = Object.keys(fuentes).filter(name => name.endsWith('.db') || name.endsWith('.sqlite'));
-      for (const fileName of dbFiles) {
-        try {
-          const ast = safeParse(dbParser, fuentes[fileName]);
-          if (Array.isArray(ast)) astDBGlobal.push(...ast);
-        } catch (e) {
-          // Ya se capturan en recolectarErroresParser
-        }
-        this.recolectarErroresParser(dbParser, 'Sintáctico (DB)', 'Léxico (DB)');
-      }
-
+      
+      // Base de Datos
       if (astDBGlobal.length > 0) {
         const resSemDB = analizarDB(astDBGlobal);
         if (!resSemDB.ok) {
-          this.errores.push(...resSemDB.errores);
+          for (let i = 0; i < resSemDB.errores.length; i++) {
+            this.errores.push(resSemDB.errores[i]);
+          }
         } else {
           simbolosCruzados.tablas = resSemDB.tablaSimbolos;
           resultados.js += generadorDB.generar(astDBGlobal) + '\n';
         }
       }
 
-      // Compilar Lógica Principal
-      let astPrincipalGlobal = [];
-      for (const fileName of principalFiles) {
-        try {
-          const ast = safeParse(principalParser, fuentes[fileName]);
-          if (Array.isArray(ast)) astPrincipalGlobal.push(...ast);
-        } catch (e) {
-          // Ya se capturan en recolectarErroresParser
+      // Componentes
+      if (astComponentesGlobal.length > 0) {
+        // Análisis Semántico de Componentes
+        const resSemantico = analizarComponentes(astComponentesGlobal);
+        if (!resSemantico.ok) {
+          for (let i = 0; i < resSemantico.errores.length; i++) {
+            this.errores.push(resSemantico.errores[i]);
+          }
+        } else {
+          simbolosCruzados.componentes = resSemantico.tablaSimbolos;
+          resultados.js += generadorComponentes.generar(astComponentesGlobal) + '\n';
         }
-        this.recolectarErroresParser(principalParser, 'Sintáctico (Principal)', 'Léxico (Principal)');
       }
 
+      // Lógica Principal
       if (astPrincipalGlobal.length > 0) {
         const resSemPrinc = analizarPrincipal(astPrincipalGlobal, simbolosCruzados);
         if (!resSemPrinc.ok) {
-          this.errores.push(...resSemPrinc.errores);
+          for (let i = 0; i < resSemPrinc.errores.length; i++) {
+            this.errores.push(resSemPrinc.errores[i]);
+          }
         } else {
           resultados.js += generadorLogica.generar(astPrincipalGlobal) + '\n';
         }
