@@ -131,6 +131,10 @@
 
 /lex
 
+/* Declaraciones de precedencia y asociatividad */
+%left SUMA GUION
+%left MULTIPLICADOR SLASH MODULO
+
 %%
 
 style_list
@@ -293,6 +297,8 @@ expr_numerica_for
     { $$ = { op: '+', left: $1, right: $3 }; }
   | expr_numerica_for GUION termino_numerico_for
     { $$ = { op: '-', left: $1, right: $3 }; }
+  | expr_numerica_for MODULO termino_numerico_for
+    { $$ = { op: '%', left: $1, right: $3 }; }
   ;
 
 termino_numerico_for
@@ -302,8 +308,6 @@ termino_numerico_for
     { $$ = { op: '*', left: $1, right: $3 }; }
   | termino_numerico_for SLASH factor_numerico_for
     { $$ = { op: '/', left: $1, right: $3 }; }
-  | expr_numerica_for MODULO termino_numerico_for
-    {$$ = { op: '%', left: $1, right: $3 }; }
   ;
 
 factor_numerico_for
