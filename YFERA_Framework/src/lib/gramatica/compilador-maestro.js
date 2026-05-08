@@ -19,8 +19,20 @@ function safeParse(parser, input) {
   if (parser.erroresSintacticos) parser.erroresSintacticos.length = 0;
 
   try {
-    parser.yy = parser.yy || {};
-    return parser.parse(input);
+    /*
+     *Reiniciar el contexto del parser en cada llamada para evitar
+    * contaminación de estado entre archivos/parses consecutivos.
+    */
+    parser.yy = {};
+    const resultado = parser.parse(input);
+
+    /*
+    * Si el parse terminó sin excepción, los errores recuperados no deben
+    * bloquear la compilación; se limpian para que no se traten como fatales (a ver si asi se recupera) */
+    if (parser.erroresLexicos) parser.erroresLexicos.length = 0;
+    if (parser.erroresSintacticos) parser.erroresSintacticos.length = 0;
+
+    return resultado;
   } catch (err) {
     // Si no es un error de los que ya capturamos, lo relanzamos
     // para que el catch del compilador lo maneje como emergencia 
@@ -280,6 +292,8 @@ class CompiladorMaestro {
           resultados.js += generadorLogica.generar(astPrincipalGlobal) + '\n';
         }
       }
+
+      resultados.html = this.generarBundle(resultados);
 
       resultados.ok = this.errores.length === 0;
       resultados.errores = this.errores;

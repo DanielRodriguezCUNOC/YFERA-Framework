@@ -29,10 +29,73 @@ function obtenerTablaSimbolos(resultado) {
   return [];
 }
 
+function normalizarAstEstilos(ast) {
+  if (!Array.isArray(ast)) {
+    return [];
+  }
+
+  const normalizados = [];
+  let indice = 0;
+
+  while (indice < ast.length) {
+    normalizados.push(normalizarNodoEstilo(ast[indice]));
+    indice += 1;
+  }
+
+  return normalizados;
+}
+
+function normalizarNodoEstilo(nodo) {
+  if (!nodo || typeof nodo !== 'object') {
+    return nodo;
+  }
+
+  const copia = Array.isArray(nodo) ? nodo.slice() : { ...nodo };
+
+  if (copia.tipo === 'estilo') {
+    copia.selector = typeof copia.selector === 'string' && copia.selector.length > 0
+      ? copia.selector
+      : copia.nombre;
+    copia.extiende = copia.extiende || copia.heredaDe || null;
+    copia.propiedades = Array.isArray(copia.propiedades)
+      ? copia.propiedades.map(normalizarPropiedadEstilo)
+      : [];
+    return copia;
+  }
+
+  if (copia.tipo === 'for' || copia.tipo === 'para') {
+    copia.tipo = 'for';
+    copia.estilos = Array.isArray(copia.estilos)
+      ? copia.estilos.map(normalizarNodoEstilo)
+      : Array.isArray(copia.propiedades)
+        ? copia.propiedades.map(normalizarNodoEstilo)
+        : [];
+    copia.desde = copia.desde || copia.inicio || null;
+    copia.hasta = copia.hasta || copia.fin || null;
+    return copia;
+  }
+
+  return copia;
+}
+
+function normalizarPropiedadEstilo(propiedad) {
+  if (!propiedad || typeof propiedad !== 'object') {
+    return propiedad;
+  }
+
+  const copia = { ...propiedad };
+  copia.propiedad = typeof copia.propiedad === 'string' && copia.propiedad.length > 0
+    ? copia.propiedad
+    : copia.nombre;
+  return copia;
+}
+
 function compilarEstilos(ast, opciones = {}) {
   const errores = [];
 
-  const resultadoSemantico = analizarEstilos(ast);
+  const astNormalizado = normalizarAstEstilos(ast);
+
+  const resultadoSemantico = analizarEstilos(astNormalizado);
   if (!resultadoSemantico || resultadoSemantico.ok === false) {
     return {
       ok: false,
@@ -42,7 +105,7 @@ function compilarEstilos(ast, opciones = {}) {
   }
 
   const tablaSimbolos = obtenerTablaSimbolos(resultadoSemantico);
-  const astLimpio = expandirForsEstilos(ast, tablaSimbolos);
+  const astLimpio = expandirForsEstilos(astNormalizado, tablaSimbolos);
   const estilosLimpios = obtenerListaEstilos(astLimpio);
 
   const resultadoExtiende = resolverExtiendeStyles(estilosLimpios, tablaSimbolos);
