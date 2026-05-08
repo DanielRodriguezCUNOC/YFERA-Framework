@@ -40,13 +40,20 @@ class AnalizadorSemanticoEstilos {
             const s = sentencias[i];
             if (!s || !s.tipo) continue;
 
+            // estilo puede venir como { tipo: 'estilo', selector } o { tipo: 'estilo', nombre }
             if (s.tipo === 'estilo') {
-                this.registrarSelectorEstatico(s.selector);
-            } else if (s.tipo === 'for' && Array.isArray(s.estilos)) {
-                for (let j = 0; j < s.estilos.length; j++) {
-                    const est = s.estilos[j];
-                    if (est && est.tipo === 'estilo') {
-                        this.registrarSelectorEstatico(est.selector);
+                const selector = s.selector || s.nombre;
+                if (selector) this.registrarSelectorEstatico(selector);
+            }
+
+            // para/for interno en styles: puede nombrarse 'for'/'para' y contener 'estilos' o 'propiedades'
+            if (s.tipo === 'for' || s.tipo === 'para') {
+                const lista = s.estilos || s.propiedades || [];
+                for (let j = 0; j < lista.length; j++) {
+                    const est = lista[j];
+                    if (est && (est.tipo === 'estilo')) {
+                        const selector = est.selector || est.nombre;
+                        if (selector) this.registrarSelectorEstatico(selector);
                     }
                 }
             }
@@ -153,7 +160,7 @@ class AnalizadorSemanticoEstilos {
 
             if (s.tipo === 'estilo') {
                 this.validarEstilo(s);
-            } else if (s.tipo === 'for') {
+            } else if (s.tipo === 'for' || s.tipo === 'para') {
                 this.validarFor(s);
             } else {
                 this.agregarError(`Tipo de sentencia no soportado: ${s.tipo}`);
@@ -166,8 +173,10 @@ class AnalizadorSemanticoEstilos {
             this.agregarError('Variable de for inválida');
         }
 
-        const desde = this.evaluarExprRangoSinVariables(nodo.desde, 'for.desde');
-        const hasta = this.evaluarExprRangoSinVariables(nodo.hasta, 'for.hasta');
+        const desdeExpr = nodo.desde || nodo.inicio;
+        const hastaExpr = nodo.hasta || nodo.fin;
+        const desde = this.evaluarExprRangoSinVariables(desdeExpr, 'for.desde');
+        const hasta = this.evaluarExprRangoSinVariables(hastaExpr, 'for.hasta');
 
         if (typeof desde === 'number' && typeof hasta === 'number') {
             if (!Number.isInteger(desde) || !Number.isInteger(hasta)) {
@@ -183,13 +192,14 @@ class AnalizadorSemanticoEstilos {
             }
         }
 
-        if (!Array.isArray(nodo.estilos)) {
+        const listaEstilos = nodo.estilos || nodo.propiedades;
+        if (!Array.isArray(listaEstilos)) {
             this.agregarError('El for debe contener estilos');
             return;
         }
 
-        for (let i = 0; i < nodo.estilos.length; i++) {
-            this.validarEstilo(nodo.estilos[i]);
+        for (let i = 0; i < listaEstilos.length; i++) {
+            this.validarEstilo(listaEstilos[i]);
         }
     }
 
@@ -199,47 +209,51 @@ class AnalizadorSemanticoEstilos {
             return;
         }
 
-        if (!this.esSelectorValido(estilo.selector)) {
-            this.agregarError(`Selector inválido: ${String(estilo.selector)}`);
+        const selector = estilo.selector || estilo.nombre;
+        if (!this.esSelectorValido(selector)) {
+            this.agregarError(`Selector inválido: ${String(selector)}`);
         }
 
-        if (estilo.extiende) {
-            if (!this.esSelectorValido(estilo.extiende)) {
-                this.agregarError(`Selector inválido en extiende: ${String(estilo.extiende)}`);
+        const extiende = estilo.extiende || estilo.heredaDe;
+        if (extiende) {
+            if (!this.esSelectorValido(extiende)) {
+                this.agregarError(`Selector inválido en extiende: ${String(extiende)}`);
             }
 
-            if (estilo.extiende === estilo.selector) {
-                this.agregarError(`Un estilo no puede extenderse a sí mismo: ${estilo.selector}`);
+            if (extiende === selector) {
+                this.agregarError(`Un estilo no puede extenderse a sí mismo: ${selector}`);
             }
 
-           if(typeof estilo.extiende === 'string' && estilo.extiende.indexOf('$') === -1) {
-                if (!this.existeEnTabla(estilo.extiende, 'selector')) {
-                    this.agregarError(`Selector no declarado en extiende: ${String(estilo.extiende)}`);
+           if(typeof extiende === 'string' && extiende.indexOf('$') === -1) {
+                if (!this.existeEnTabla(extiende, 'selector')) {
+                    this.agregarError(`Selector no declarado en extiende: ${String(extiende)}`);
                 }
             
            }
         }
 
-        if (!Array.isArray(estilo.propiedades)) {
-            this.agregarError(`Lista de propiedades inválida en ${String(estilo.selector)}`);
+        const propiedades = estilo.propiedades || [];
+        if (!Array.isArray(propiedades)) {
+            this.agregarError(`Lista de propiedades inválida en ${String(selector)}`);
             return;
         }
 
         const propsVistas = {};
-        for (let i = 0; i < estilo.propiedades.length; i++) {
-            const p = estilo.propiedades[i];
-            if (!p || typeof p.propiedad !== 'string') {
-                this.agregarError(`Propiedad inválida en ${String(estilo.selector)}`);
+        for (let i = 0; i < propiedades.length; i++) {
+            const p = propiedades[i];
+            const nombreProp = p && (p.propiedad || p.nombre);
+            if (!p || typeof nombreProp !== 'string') {
+                this.agregarError(`Propiedad inválida en ${String(selector)}`);
                 continue;
             }
 
-            if (propsVistas[p.propiedad]) {
-                this.agregarError(`Propiedad duplicada "${p.propiedad}" en "${estilo.selector}"`);
+            if (propsVistas[nombreProp]) {
+                this.agregarError(`Propiedad duplicada "${nombreProp}" en "${selector}"`);
             } else {
-                propsVistas[p.propiedad] = true;
+                propsVistas[nombreProp] = true;
             }
 
-            this.validarPropiedad(p.propiedad, p.valor);
+            this.validarPropiedad(nombreProp, p.valor);
         }
     }
 

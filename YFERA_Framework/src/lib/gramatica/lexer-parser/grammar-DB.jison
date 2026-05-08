@@ -50,7 +50,7 @@
 
 \s+                                 /* ignorar espacios y saltos */
 [\u200B\u200C\u200D\uFEFF\u00A0]+ /* ignorar invisibles y nbsp */
-#.*                             /* ignorar comentarios de línea */
+"#".*                           /* ignorar comentarios de línea */
 
 "TABLE"                 return 'TABLA';
 "COLUMNS"               return 'COLUMNAS';
@@ -98,10 +98,20 @@
 %%
 
 programa
+  : lista_sentencias EOF
+    { return $1; }
+  | error EOF {
+      registrarErrorSintacticoActual('Estructura DB invalida');
+      yyerrok;
+      return [];
+    }
+  ;
+
+lista_sentencias
   : /* vacio */
     { $$ = []; }
-  | programa sentencia
-    { $$ = $1.concat($2 ? [$2] : []); }
+  | lista_sentencias sentencia
+    { $$ = $1.concat($2 ? [$2] : []); return $$; }
   ;
 
 sentencia

@@ -147,9 +147,9 @@ style_definitions
 
 style_definition
   : IDENTIFICADOR LLAVE_ABRE style_body LLAVE_CIERRA
-    { $$ = { nombre: $1, propiedades: $3 }; }
+    { $$ = { tipo: 'estilo', nombre: $1, propiedades: $3 }; }
   | IDENTIFICADOR EXTIENDE IDENTIFICADOR LLAVE_ABRE style_body LLAVE_CIERRA
-    { $$ = { nombre: $1, heredaDe: $3, propiedades: $5 }; }
+    { $$ = { tipo: 'estilo', nombre: $1, heredaDe: $3, propiedades: $5 }; }
   ;
 
 style_body

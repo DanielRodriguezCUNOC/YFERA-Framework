@@ -94,10 +94,10 @@ case 3: case 9:
  $$[$0-1].push($$[$0]); this.$ = $$[$0-1]; 
 break;
 case 4:
- this.$ = { nombre: $$[$0-3], propiedades: $$[$0-1] }; 
+ this.$ = { tipo: 'estilo', nombre: $$[$0-3], propiedades: $$[$0-1] }; 
 break;
 case 5:
- this.$ = { nombre: $$[$0-5], heredaDe: $$[$0-3], propiedades: $$[$0-1] }; 
+ this.$ = { tipo: 'estilo', nombre: $$[$0-5], heredaDe: $$[$0-3], propiedades: $$[$0-1] }; 
 break;
 case 6:
  this.$ = []; 

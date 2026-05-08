@@ -50,7 +50,7 @@
 
 \s+                              /* ignorar espacios y saltos */
 [\u200B\u200C\u200D\uFEFF\u00A0]+   /* ignorar invisibles y nbsp */
-#.*                             /* ignorar comentarios de línea */
+"#".*                           /* ignorar comentarios de línea */
 
 
 /* Palabras reservadas */
@@ -143,14 +143,24 @@
 %%
 
 programa
+  : lista_componentes EOF
+    { return $1; }
+  | error EOF {
+      registrarErrorSintacticoActual('Estructura de componentes invalida');
+      yyerrok;
+      return [];
+    }
+  ;
+
+lista_componentes
   : /* vacío */
     { $$ = []; }
-  | programa componente
-    { $$ = $1.concat([$2]); }
-  | programa error LLAVE_CIERRA {
+  | lista_componentes componente
+    { $$ = $1.concat([$2]); return $$; }
+  | lista_componentes error LLAVE_CIERRA {
       registrarErrorSintacticoActual('Componente invalido');
       yyerrok;
-      $$ = $1;
+      $$ = $1; return $$;
     }
   ;
 

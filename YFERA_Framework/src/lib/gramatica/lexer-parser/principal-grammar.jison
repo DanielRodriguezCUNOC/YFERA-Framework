@@ -125,12 +125,12 @@
 %%
 
 programa
-  : lista_imports lista_declaraciones lista_funciones bloque_main
-    { $$ = { imports: $1, declaraciones: $2, funciones: $3, main: $4 }; }
+  : lista_imports lista_declaraciones lista_funciones bloque_main EOF
+    { $$ = { imports: $1, declaraciones: $2, funciones: $3, main: $4 }; return $$; }
   | error EOF {
       registrarErrorSintacticoActual('Estructura principal invalida');
       yyerrok;
-      $$ = { imports: [], declaraciones: [], funciones: [], main: null };
+      $$ = { imports: [], declaraciones: [], funciones: [], main: null }; return $$;
     }
   ;
 
