@@ -187,6 +187,7 @@ class CompiladorMaestro {
       let astPrincipalGlobal = [];
 
       // COMPILACIÓN EN CASCADA
+  
       for (let i = 0; i < listaOrdenada.length; i++) {
         let archivo = listaOrdenada[i];
         let tipo = archivo.tipo;
@@ -226,7 +227,7 @@ class CompiladorMaestro {
           } catch (e) {
           }
           this.recolectarErroresParser(dbParser, 'Sintáctico (DB)', 'Léxico (DB)');
-        } else if (tipo === '.y' || tipo === '.principal') {
+        } else if (tipo === '.y') {
           try {
             const ast = safeParse(principalParser, contenido);
             if (Array.isArray(ast)) {
