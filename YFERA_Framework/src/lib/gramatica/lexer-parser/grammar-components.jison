@@ -1,11 +1,10 @@
 /*
 * Analizador Lexico
 */
-\/*[\s\S]*?\*\/    /* ignorar comentarios de bloque */
-
 
 %{
   
+  var yyerrok = 0, yyclearin = 0; 
   var erroresLexicos = [];
   var erroresSintacticos = [];
   parser.erroresLexicos = erroresLexicos;
@@ -22,8 +21,6 @@
   }
 
   function registrarErrorSintactico(mensaje, lexema, linea, columna){
-  "@"[a-zA-Z\u00C0-\u017F_][a-zA-Z0-9_\u00C0-\u017F]*  return 'REFERENCIA_CAMPO';
-  "@"                return 'REFERENCIA_ID_FORMULARIO';
     erroresSintacticos.push({
       tipo: 'sintactico',
       lexema: lexema,
@@ -48,15 +45,16 @@
   };
 %}
 
-  \'[^\']*\'                         return 'CARACTER';
+%lex
 %options ranges yylineno
-  [a-zA-Z\u00C0-\u017F_][a-zA-Z0-9_\u00C0-\u017F-]*            return 'IDENTIFICADOR';
+%%
 
-\s+                              /* ignorar espacios y saltos */
-[\u200B\u200C\u200D\uFEFF\u00A0]+   /* ignorar invisibles y nbsp */
-"#".*                           /* ignorar comentarios de línea */
+\s+                                 /* ignorar espacios y saltos */
+[\u200B\u200C\u200D\uFEFF\u00A0]+ /* ignorar invisibles y nbsp */
+\/\*[\s\S]*?\*\/                    /* ignorar comentarios de bloque */
+"#".*                               /* ignorar comentarios de línea */
 
-
+\'[^\']*\'                         return 'CARACTER';
 /* Palabras reservadas */
 
 "component"        return 'COMPONENTE';
@@ -113,14 +111,15 @@
 "+"                return 'SUMA';
 "*"                return 'MULTIPLICADOR';
 "/"                return 'DIVISION';
-"'"                return 'COMILLA_SIMPLE';
-"\""               return 'COMILLA_DOBLE';
+
 
 
 
 "$"[a-zA-Z_][a-zA-Z0-9_]*          return 'VARIABLE';
 \"[^\"]*\"                         return 'CADENA';
 \'[^\']*\'                         return 'CARACTER';
+"'"                return 'COMILLA_SIMPLE';
+"\""               return 'COMILLA_DOBLE';
 [0-9]+("."[0-9]+)?                 return 'NUMERO';
 [a-zA-Z_][a-zA-Z0-9_-]*            return 'IDENTIFICADOR';
 
@@ -149,11 +148,6 @@
 programa
   : lista_componentes EOF
     { return $1; }
-  | error EOF {
-      registrarErrorSintacticoActual('Estructura de componentes invalida');
-      yyerrok;
-      return [];
-    }
   ;
 
 lista_componentes
@@ -289,9 +283,9 @@ celda_tabla
   ;
 
 texto
-  : TEXTO PARENTESIS_ABRE CADENA PARENTESIS_CIERRA
+  : TEXTO PARENTESIS_ABRE expresion PARENTESIS_CIERRA
     { $$ = { tipo: 'texto', estilos: [], contenido: $3 }; }
-  | TEXTO MENOR lista_estilos MAYOR PARENTESIS_ABRE CADENA PARENTESIS_CIERRA
+  | TEXTO MENOR lista_estilos MAYOR PARENTESIS_ABRE expresion PARENTESIS_CIERRA
     { $$ = { tipo: 'texto', estilos: $3, contenido: $6 }; }
   | TEXTO error PARENTESIS_CIERRA {
       registrarErrorSintacticoActual('Texto invalido');

@@ -52,6 +52,7 @@
 [\u200B\u200C\u200D\uFEFF\u00A0]+ /* ignorar invisibles y nbsp */
 \/\*[\s\S]*?\*\/    /* ignorar comentarios de bloque */
 "#".*                           /* ignorar comentarios de línea */
+"--".*                          /* ignorar comentarios SQL estilo -- */
 
 "TABLE"                 return 'TABLA';
 "COLUMNS"               return 'COLUMNAS';
@@ -101,11 +102,6 @@
 programa
   : lista_sentencias EOF
     { return $1; }
-  | error EOF {
-      registrarErrorSintacticoActual('Estructura DB invalida');
-      yyerrok;
-      return [];
-    }
   ;
 
 lista_sentencias
@@ -169,13 +165,30 @@ tipo_dato
   ;
 
 seleccionar_columna
-  : IDENTIFICADOR PUNTO IDENTIFICADOR
-    { $$ = { tipo: 'select_column', tabla: $1, columna: $3 }; }
-  | IDENTIFICADOR error IDENTIFICADOR {
+  : IDENTIFICADOR PUNTO lista_campos_seleccion
+    {
+      $$ = {
+        tipo: 'select_columns',
+        tabla: $1,
+        columnas: $3,
+      };
+    }
+  | IDENTIFICADOR error lista_campos_seleccion {
       registrarErrorSintacticoActual('Consulta de columna invalida');
       yyerrok;
-      $$ = { tipo: 'select_column', tabla: $1, columna: $3 };
+      $$ = {
+        tipo: 'select_columns',
+        tabla: $1,
+        columnas: $3,
+      };
     }
+  ;
+
+lista_campos_seleccion
+  : IDENTIFICADOR
+    { $$ = [$1]; }
+  | lista_campos_seleccion COMA IDENTIFICADOR
+    { $$ = $1.concat([$3]); }
   ;
 
 insertar_registro
@@ -224,9 +237,9 @@ asignacion
 
 valor
   : CADENA
-    { $$ = $1; }
+    { $$ = $1.slice(1, -1); }
   | CARACTER
-    { $$ = $1; }
+    { $$ = $1.slice(1, -1); }
   | DECIMAL
     { $$ = Number($1); }
   | ENTERO

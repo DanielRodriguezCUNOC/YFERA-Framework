@@ -56,6 +56,7 @@
 "import"                return 'IMPORTAR';
 "execute"               return 'EJECUTAR';
 "load"                  return 'CARGAR';
+"render"                return 'RENDER';
 "main"                  return 'MAIN';
 "function"              return 'FUNCION';
 "while"                 return 'MIENTRAS';
@@ -106,6 +107,8 @@
 ":"                     return 'DOS_PUNTOS';
 "."                     return 'PUNTO';
 
+"$"[a-zA-Z_][a-zA-Z0-9_]*      return 'VARIABLE';
+
 "`"[^`]*"`"            return 'CONSULTA_DB';
 \"[^\"]*\"                            return 'CADENA';
 \'[^\']\'                             return 'CARACTER';
@@ -134,11 +137,6 @@
 programa
   : lista_imports lista_declaraciones lista_funciones bloque_main EOF
     { $$ = { imports: $1, declaraciones: $2, funciones: $3, main: $4 }; return $$; }
-  | error EOF {
-      registrarErrorSintacticoActual('Estructura principal invalida');
-      yyerrok;
-      $$ = { imports: [], declaraciones: [], funciones: [], main: null }; return $$;
-    }
   ;
 
 lista_imports
@@ -243,6 +241,10 @@ declaracion
     { $$ = { tipo: 'arreglo_literal', dato: $1, id: $4, valor: $6 }; }
   | tipo CORCHETE_ABIERTO CORCHETE_CERRADO IDENTIFICADOR ASIGNACION EJECUTAR CONSULTA_DB PUNTO_COMA
     { $$ = { tipo: 'arreglo_execute', dato: $1, id: $4, consulta: $7 }; }
+  | RENDER IDENTIFICADOR PARENTESIS_ABIERTO PARENTESIS_CERRADO PUNTO_COMA
+    { $$ = { tipo: 'render', invocacion: { componente: $2, args: [] } }; }
+  | RENDER IDENTIFICADOR PARENTESIS_ABIERTO lista_expresiones PARENTESIS_CERRADO PUNTO_COMA
+    { $$ = { tipo: 'render', invocacion: { componente: $2, args: $4 } }; }
   ;
 
 arreglo_tamanio
@@ -438,6 +440,8 @@ factor
     { $$ = true; }
   | FALSO
     { $$ = false; }
+  | VARIABLE
+    { $$ = { tipo: 'id', valor: $1.substring(1) }; }
   | IDENTIFICADOR
     { $$ = { tipo: 'id', valor: $1 }; }
   | acceso_arreglo
