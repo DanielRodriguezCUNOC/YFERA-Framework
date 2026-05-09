@@ -50,6 +50,7 @@
 
 \s+                                 /* ignorar espacios y saltos */
 [\u200B\u200C\u200D\uFEFF\u00A0]+ /* ignorar invisibles y nbsp */
+\/\*[\s\S]*?\*\/    /* ignorar comentarios de bloque */
 "#".*                                /* ignorar comentarios de linea */
 
 "import"                return 'IMPORTAR';
@@ -58,6 +59,11 @@
 "main"                  return 'MAIN';
 "function"              return 'FUNCION';
 "while"                 return 'MIENTRAS';
+"do"                    return 'DO';
+"switch"                return 'SWITCH';
+"case"                  return 'CASO';
+"default"               return 'DEFECTO';
+"break"                 return 'BREAK';
 "for"                   return 'PARA';
 "if"                    return 'SI';
 "else"                  return 'SINO';
@@ -97,6 +103,7 @@
 "-"                     return 'RESTA';
 "*"                     return 'MULTIPLICACION';
 "/"                     return 'DIVISION';
+":"                     return 'DOS_PUNTOS';
 "."                     return 'PUNTO';
 
 "`"[^`]*"`"            return 'CONSULTA_DB';
@@ -104,7 +111,7 @@
 \'[^\']\'                             return 'CARACTER';
 [0-9]+"."[0-9]+                        return 'DECIMAL';
 [0-9]+                                  return 'ENTERO';
-[a-zA-Z_][a-zA-Z0-9_]*                  return 'IDENTIFICADOR';
+[a-zA-Z\u00C0-\u017F_][a-zA-Z0-9_\u00C0-\u017F]*                  return 'IDENTIFICADOR';
 
 <<EOF>>                 return 'EOF';
 
@@ -295,8 +302,38 @@ sentencia_main
     { $$ = $1; }
   | ciclo_for
     { $$ = $1; }
+  | ciclo_do
+    { $$ = $1; }
+  | sentencia_switch
+    { $$ = $1; }
   | condicional
     { $$ = $1; }
+  | BREAK PUNTO_COMA
+    { $$ = { tipo: 'break' }; }
+  ;
+
+ciclo_do
+  : DO LLAVE_ABIERTA lista_sentencias_main LLAVE_CERRADA MIENTRAS PARENTESIS_ABIERTO expresion PARENTESIS_CERRADO
+    { $$ = { tipo: 'do_while', cuerpo: $3, condicion: $7 }; }
+  ;
+
+sentencia_switch
+  : SWITCH PARENTESIS_ABIERTO expresion PARENTESIS_CERRADO LLAVE_ABIERTA lista_casos LLAVE_CERRADA
+    { $$ = { tipo: 'switch', expresion: $3, casos: $6 }; }
+  ;
+
+lista_casos
+  : /* vacio */
+    { $$ = []; }
+  | lista_casos caso
+    { $$ = $1.concat([$2]); }
+  ;
+
+caso
+  : CASO expresion DOS_PUNTOS lista_sentencias_main
+    { $$ = { tipo: 'case', valor: $2, cuerpo: $4 }; }
+  | DEFECTO DOS_PUNTOS lista_sentencias_main
+    { $$ = { tipo: 'default', cuerpo: $3 }; }
   ;
 
 invocacion_componente

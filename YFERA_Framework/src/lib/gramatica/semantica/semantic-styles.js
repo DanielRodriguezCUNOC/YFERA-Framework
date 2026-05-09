@@ -401,7 +401,7 @@ class AnalizadorSemanticoEstilos {
             return;
         }
 
-        if (!(expr.op === '+' || expr.op === '-' || expr.op === '*' || expr.op === '/')) {
+        if (!(expr.op === '+' || expr.op === '-' || expr.op === '*' || expr.op === '/' || expr.op === '%' || expr.op === '==')) {
             this.agregarError(`Operador inválido en ${contexto}`);
             return;
         }
@@ -454,6 +454,10 @@ class AnalizadorSemanticoEstilos {
                 return null;
             }
             return left % right;
+        }
+
+        if (expr.op === '==') {
+            return left === right ? 1 : 0;
         }
 
         this.agregarError(`Operador inválido en ${contexto}`);
@@ -512,7 +516,14 @@ class AnalizadorSemanticoEstilos {
             }
 
             for (let i = 0; i < 3; i++) {
-                const c = color.valor[i];
+                let c = color.valor[i];
+                if (c && typeof c === 'object' && c.op) {
+                    //* intentar evaluar expresiones numéricas sin variables
+                    const val = this.evaluarExprRangoSinVariables(c, `${contexto}.rgb[${i}]`);
+                    if (val === null) return;
+                    c = val;
+                }
+
                 if (!Number.isInteger(c) || c < 0 || c > 255) {
                     this.agregarError(`Componente RGB fuera de rango [0,255] en ${contexto}`);
                     return;
