@@ -156,6 +156,101 @@ class CompiladorMaestro {
     });
   }
 
+  extraerBloquesComponentesTopLevel(contenido) {
+    if (typeof contenido !== 'string' || contenido.length === 0) {
+      return [];
+    }
+
+    const bloques = [];
+    let indice = 0;
+    let inicioBloque = null;
+    let profundidad = 0;
+    let enCadena = null;
+    let enComentarioBloque = false;
+    let enComentarioLinea = false;
+
+    const esEspacio = (c) => c === ' ' || c === '\t' || c === '\r' || c === '\n' || c === '\f';
+
+    while (indice < contenido.length) {
+      const actual = contenido.charAt(indice);
+      const siguiente = indice + 1 < contenido.length ? contenido.charAt(indice + 1) : '';
+
+      if (enComentarioBloque) {
+        if (actual === '*' && siguiente === '/') {
+          enComentarioBloque = false;
+          indice += 2;
+          continue;
+        }
+        indice += 1;
+        continue;
+      }
+
+      if (enComentarioLinea) {
+        if (actual === '\n') {
+          enComentarioLinea = false;
+        }
+        indice += 1;
+        continue;
+      }
+
+      if (enCadena) {
+        if (actual === '\\') {
+          indice += 2;
+          continue;
+        }
+        if (actual === enCadena) {
+          enCadena = null;
+        }
+        indice += 1;
+        continue;
+      }
+
+      if (actual === '/' && siguiente === '*') {
+        enComentarioBloque = true;
+        indice += 2;
+        continue;
+      }
+
+      if (actual === '/' && siguiente === '/') {
+        enComentarioLinea = true;
+        indice += 2;
+        continue;
+      }
+
+      if (actual === '"' || actual === '\'' || actual === '`') {
+        enCadena = actual;
+        if (inicioBloque === null && !esEspacio(actual)) {
+          inicioBloque = indice;
+        }
+        indice += 1;
+        continue;
+      }
+
+      if (inicioBloque === null) {
+        if (esEspacio(actual)) {
+          indice += 1;
+          continue;
+        }
+        inicioBloque = indice;
+      }
+
+      if (actual === '{') {
+        profundidad += 1;
+      } else if (actual === '}') {
+        profundidad -= 1;
+        if (profundidad <= 0 && inicioBloque !== null) {
+          bloques.push(contenido.slice(inicioBloque, indice + 1));
+          inicioBloque = null;
+          profundidad = 0;
+        }
+      }
+
+      indice += 1;
+    }
+
+    return bloques;
+  }
+
   /**
    * Compila un proyecto de YFERA completo.
    * @param {Object} fuentes - Objeto con los contenidos de los archivos
@@ -175,6 +270,7 @@ class CompiladorMaestro {
       let listaOrdenada = [];
       let pilaRutas = [];
       let yaProcesados = [];
+      let programasPrincipales = [];
       let llavesFuentes = Object.keys(fuentes);
 
       // Ejecutar algoritmo DFS
@@ -185,8 +281,6 @@ class CompiladorMaestro {
       let astEstilosGlobal = [];
       let astComponentesGlobal = [];
       let astDBGlobal = [];
-      let astPrincipalGlobal = [];
-
       // COMPILACIÓN EN CASCADA
   
       for (let i = 0; i < listaOrdenada.length; i++) {
@@ -208,10 +302,26 @@ class CompiladorMaestro {
           this.recolectarErroresParser(stylesParser, 'Sintáctico (Estilo)', 'Léxico (Estilo)');
         } else if (tipo === '.comp') {
           try {
-            const ast = safeParse(componentsParser, contenido);
-            if (Array.isArray(ast)) {
-              for (let j = 0; j < ast.length; j++) {
-                astComponentesGlobal.push(ast[j]);
+            const bloquesComponentes = this.extraerBloquesComponentesTopLevel(contenido);
+            if (bloquesComponentes.length > 0) {
+              for (let b = 0; b < bloquesComponentes.length; b++) {
+                const ast = safeParse(componentsParser, bloquesComponentes[b]);
+                if (Array.isArray(ast)) {
+                  for (let j = 0; j < ast.length; j++) {
+                    if (ast[j] && typeof ast[j] === 'object') {
+                      astComponentesGlobal.push(ast[j]);
+                    }
+                  }
+                }
+              }
+            } else {
+              const ast = safeParse(componentsParser, contenido);
+              if (Array.isArray(ast)) {
+                for (let j = 0; j < ast.length; j++) {
+                  if (ast[j] && typeof ast[j] === 'object') {
+                    astComponentesGlobal.push(ast[j]);
+                  }
+                }
               }
             }
           } catch (e) {
@@ -231,10 +341,8 @@ class CompiladorMaestro {
         } else if (tipo === '.y') {
           try {
             const ast = safeParse(principalParser, contenido);
-            if (Array.isArray(ast)) {
-              for (let j = 0; j < ast.length; j++) {
-                astPrincipalGlobal.push(ast[j]);
-              }
+            if (ast) {
+              programasPrincipales.push(ast);
             }
           } catch (e) {
           }
@@ -284,14 +392,15 @@ class CompiladorMaestro {
       }
 
       // Lógica Principal
-      if (astPrincipalGlobal.length > 0) {
-        const resSemPrinc = analizarPrincipal(astPrincipalGlobal, simbolosCruzados);
+      if (programasPrincipales.length > 0) {
+        const programaPrincipal = this.combinarProgramasPrincipales(programasPrincipales);
+        const resSemPrinc = analizarPrincipal(programaPrincipal, simbolosCruzados);
         if (!resSemPrinc.ok) {
           for (let i = 0; i < resSemPrinc.errores.length; i++) {
             this.errores.push(resSemPrinc.errores[i]);
           }
         } else {
-          resultados.js += generadorLogica.generar(astPrincipalGlobal) + '\n';
+          resultados.js += generadorLogica.generar(programaPrincipal) + '\n';
         }
       }
 
@@ -310,10 +419,56 @@ class CompiladorMaestro {
     }
   }
 
+  combinarProgramasPrincipales(programas) {
+    const combinado = {
+      tipo: 'programa',
+      imports: [],
+      declaraciones: [],
+      funciones: [],
+      main: { tipo: 'main', sentencias: [] }
+    };
+
+    if (!Array.isArray(programas)) {
+      return combinado;
+    }
+
+    let i = 0;
+    while (i < programas.length) {
+      const programa = programas[i];
+      if (Array.isArray(programa)) {
+        combinado.main.sentencias = combinado.main.sentencias.concat(programa);
+      } else if (programa && typeof programa === 'object') {
+        if (Array.isArray(programa.imports)) {
+          combinado.imports = combinado.imports.concat(programa.imports);
+        }
+        if (Array.isArray(programa.declaraciones)) {
+          combinado.declaraciones = combinado.declaraciones.concat(programa.declaraciones);
+        }
+        if (Array.isArray(programa.funciones)) {
+          combinado.funciones = combinado.funciones.concat(programa.funciones);
+        }
+        if (programa.main) {
+          const sentenciasMain = Array.isArray(programa.main)
+            ? programa.main
+            : Array.isArray(programa.main.sentencias)
+              ? programa.main.sentencias
+              : Array.isArray(programa.main.cuerpo)
+                ? programa.main.cuerpo
+                : [];
+          combinado.main.sentencias = combinado.main.sentencias.concat(sentenciasMain);
+        }
+      }
+      i += 1;
+    }
+
+    return combinado;
+  }
+
   /**
    * Genera el HTML para cargar el bundle.js
    */
-  generarBundle(resultados) {
+  generarBundle(resultados, opciones = {}) {
+    const bootstrapSql = this.generarBootstrapSql(opciones.wasmBase64 || '');
     return `
 <!DOCTYPE html>
 <html lang="es">
@@ -323,6 +478,8 @@ class CompiladorMaestro {
 </head>
 <body>
     <div id="app"></div>
+    <script src="https://sql.js.org/dist/sql-wasm.js"></script>
+    ${bootstrapSql}
     <script src="bundle.js"></script>
 </body>
 </html>
@@ -333,8 +490,9 @@ class CompiladorMaestro {
    * Genera una vista previa autocontenida con el bundle inline.
    * Carga sql.js para soporte de .sqlite.
    */
-  generarVistaPrevia(resultados) {
+  generarVistaPrevia(resultados, opciones = {}) {
     const bundleJs = resultados.bundleJs || resultados.js || '';
+    const bootstrapSql = this.generarBootstrapSql(opciones.wasmBase64 || '');
     return `
 <!DOCTYPE html>
 <html lang="es">
@@ -346,12 +504,34 @@ class CompiladorMaestro {
 <body>
     <div id="app"></div>
     <script src="https://sql.js.org/dist/sql-wasm.js"><\/script>
+    ${bootstrapSql}
     <script>
 ${bundleJs}
     </script>
 </body>
 </html>
     `;
+  }
+
+  generarBootstrapSql(wasmBase64) {
+    if (typeof wasmBase64 !== 'string' || wasmBase64.length === 0) {
+      return '';
+    }
+
+    const base64Seguro = wasmBase64.replace(/</g, '\\u003c');
+    return `<script>
+(function () {
+  if (typeof initSqlJs !== 'function') return;
+  const __wasmBase64 = '${base64Seguro}';
+  const __originalInitSqlJs = initSqlJs;
+  const __wasmBinary = Uint8Array.from(atob(__wasmBase64), function (c) { return c.charCodeAt(0); }).buffer;
+  window.initSqlJs = function (options) {
+    options = options || {};
+    options.wasmBinary = __wasmBinary;
+    return __originalInitSqlJs(options);
+  };
+})();
+</script>`;
   }
 
   /**
@@ -378,7 +558,17 @@ if (typeof document !== 'undefined' && __YFERA_CSS) {
   }
 }
 
+(async () => {
+  if (typeof YFERA !== 'undefined' && YFERA && typeof YFERA.initDb === 'function') {
+    try {
+      await YFERA.initDb();
+    } catch (error) {
+      console.warn('No se pudo inicializar YFERA_DB antes de cargar la lógica:', error);
+    }
+  }
+
 ${logica}
+})();
 `;
   }
 
@@ -437,6 +627,61 @@ ${logica}
       }
     },
 
+    async load(origen, opciones = {}) {
+      let modulo = origen;
+
+      if (typeof origen === 'string') {
+        const esURL = origen.startsWith('file:') || origen.startsWith('http:') || origen.startsWith('https:') || origen.startsWith('data:') || origen.startsWith('blob:');
+        const url = esURL ? origen : new URL(origen, document.baseURI).href;
+        modulo = await import(url);
+      } else if (origen && typeof origen.then === 'function') {
+        modulo = await origen;
+      }
+
+      if (!modulo || typeof modulo !== 'object') {
+        const err = new Error('load: módulo inválido');
+        err.code = 'INVALID_MODULE';
+        throw err;
+      }
+
+      const registrar = (nombre, valor, tipoForzado = '') => {
+        if (!nombre) return;
+        if (typeof valor === 'function') {
+          const tipo = tipoForzado || valor.__yferaKind || opciones.kind || 'function';
+          if (tipo === 'component') {
+            this.registerComponent(nombre, valor);
+          } else {
+            this.registerFunction(nombre, valor);
+          }
+          return;
+        }
+        if (opciones.registerGlobals) {
+          this.setGlobal(nombre, valor);
+        }
+      };
+
+      const procesarMapa = (mapa, tipoForzado = '') => {
+        if (!mapa || typeof mapa !== 'object') return;
+        for (const [nombre, valor] of Object.entries(mapa)) {
+          registrar(nombre, valor, tipoForzado);
+        }
+      };
+
+      if (modulo.default && typeof modulo.default === 'object' && !Array.isArray(modulo.default)) {
+        procesarMapa(modulo.default.functions, 'function');
+        procesarMapa(modulo.default.components, 'component');
+        procesarMapa(modulo.default.symbols);
+        procesarMapa(modulo.default.globals, 'global');
+      }
+
+      for (const [nombre, valor] of Object.entries(modulo)) {
+        if (nombre === 'default') continue;
+        registrar(nombre, valor);
+      }
+
+      return modulo;
+    },
+
     async initDb() {
       if (this._dbReady) return;
       try {
@@ -447,18 +692,39 @@ ${logica}
         const SQL = await initSqlJs();
         let data = null;
         try {
-          const idb = indexedDB.open('YFERA_DB', 1);
-          await new Promise((res, rej) => {
-            idb.onsuccess = () => {
-              const store = idb.result.transaction('sqlite', 'readonly').objectStore('sqlite');
-              const req = store.get('main');
-              req.onsuccess = () => { data = req.result ? req.result.data : null; res(); };
-              req.onerror = rej;
+          const idbReq = indexedDB.open('YFERA_DB', 1);
+          const obj = await new Promise((res, rej) => {
+            idbReq.onupgradeneeded = (e) => {
+              try {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('sqlite')) {
+                  db.createObjectStore('sqlite', { keyPath: 'id' });
+                }
+              } catch (err) {
+                // ignore
+              }
             };
-            idb.onerror = rej;
+            idbReq.onsuccess = () => res({ db: idbReq.result });
+            idbReq.onerror = () => rej(idbReq.error || new Error('IndexedDB open error'));
           });
+
+          try {
+            const db = obj.db;
+            if (db && db.objectStoreNames && db.objectStoreNames.contains('sqlite')) {
+              const tx = db.transaction('sqlite', 'readonly');
+              const store = tx.objectStore('sqlite');
+              const req = store.get('main');
+              data = await new Promise((res, rej) => {
+                req.onsuccess = () => res(req.result ? req.result.data : null);
+                req.onerror = () => res(null);
+              });
+            }
+          } catch (e) {
+            // ignore read errors, fallback to empty DB
+            data = null;
+          }
         } catch (e) {
-          console.warn('IndexedDB no disponible:', e);
+          console.warn('IndexedDB no disponible o inaccesible:', e);
         }
         if (data) {
           this._sqlDb = new SQL.Database(new Uint8Array(data));
@@ -518,9 +784,8 @@ ${logica}
       }
       const db = typeof globalThis.YFERA_DB !== 'undefined' ? globalThis.YFERA_DB : null;
       if (!db) {
-        const err = new Error('YFERA_DB no disponible');
-        err.code = 'NO_DB';
-        throw err;
+        console.error('YFERA_DB no disponible: La base de datos no se ha inicializado o db/sql.js no está enlazado.');
+        return { rows: [], count: 0 };
       }
       if (typeof db[op] !== 'function') {
         const err = new Error('Operación DB ' + op + ' no existe');

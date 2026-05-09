@@ -20,6 +20,7 @@ import {
 	contarProyectos,
 	guardarEstadoInterfaz,
 	guardarNodos,
+	guardarNodo,
 	guardarPestanas,
 	guardarProyecto,
 	obtenerEstadoInterfazPorProyecto,
@@ -27,6 +28,7 @@ import {
 	obtenerPestanasPorProyecto,
 	obtenerProyectoMasReciente,
 	obtenerProyectoPorId,
+	borrarNodosPorIds,
 } from "./arbol.repository.js";
 
 function crearProyectoInicial() {

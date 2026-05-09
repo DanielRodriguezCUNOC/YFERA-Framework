@@ -108,7 +108,6 @@ export const arbolInicial = [
 
           # Ciclo para mostrar múltiples elementos
           while (contador < 3) {
-            T("Iteración del sistema: $contador");
             contador = contador + 1;
           }
 }`,

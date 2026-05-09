@@ -28,6 +28,8 @@
   import { TIPO_NODO } from "$lib/arbol/arbol.types.js";
   import { compilador } from "$lib/gramatica/compilador-maestro";
   import JSZip from "jszip";
+  import initSqlJs from "sql.js";
+  import { parser as dbParser } from "$lib/gramatica/lexer-parser/grammar-DB.js";
 
   let arbol = $state(arbolInicial);
   let idsCarpetasExpandidas = $state(new Set(idsCarpetasIniciales));
@@ -527,6 +529,11 @@
     const node = buscarNodoPorId(arbol, nodeId);
     if (!node || node.type !== "file") return;
 
+    // Guardar contenido del archivo actual antes de cambiar
+    if (idNodoActivo && idNodoActivo !== nodeId) {
+      await saveFile();
+    }
+
     idNodoActivo = node.id;
     contenidoEditor = node.content ?? "";
 
@@ -596,13 +603,154 @@
       {
         clase: "system",
         text: conexionActiva
-          ? "Conexion simulada con la base de datos establecida XDD."
+          ? "Conexion con la base de datos establecida."
           : "Conexion con la base de datos finalizada.",
       },
     ];
   }
 
-  function sendCommand() {
+  function astToSql(stmt) {
+    if (!stmt) return null;
+    switch (stmt.tipo) {
+      case "create_table": {
+        const cols = stmt.columnas
+          .map((c) => {
+            let t = "TEXT";
+            if (c.tipo === "int") t = "INTEGER";
+            if (c.tipo === "float") t = "REAL";
+            if (c.tipo === "boolean") t = "BOOLEAN";
+            return `${c.nombre} ${t}`;
+          })
+          .join(", ");
+        return `CREATE TABLE IF NOT EXISTS ${stmt.tabla} (id INTEGER PRIMARY KEY AUTOINCREMENT, ${cols});`;
+      }
+      case "insert": {
+        const cols = stmt.valores.map((v) => v.columna).join(", ");
+        const vals = stmt.valores
+          .map((v) => {
+            if (typeof v.valor === "string")
+              return `'${v.valor.replace(/'/g, "''")}'`;
+            if (typeof v.valor === "boolean") return v.valor ? 1 : 0;
+            return v.valor;
+          })
+          .join(", ");
+        return `INSERT INTO ${stmt.tabla} (${cols}) VALUES (${vals});`;
+      }
+      case "update": {
+        const sets = stmt.valores
+          .map((v) => {
+            let val = v.valor;
+            if (typeof val === "string") val = `'${val.replace(/'/g, "''")}'`;
+            else if (typeof val === "boolean") val = val ? 1 : 0;
+            return `${v.columna} = ${val}`;
+          })
+          .join(", ");
+        return `UPDATE ${stmt.tabla} SET ${sets} WHERE id = ${stmt.id};`;
+      }
+      case "delete":
+        return `DELETE FROM ${stmt.tabla} WHERE id = ${stmt.id};`;
+      case "select_column":
+        return `SELECT ${stmt.columna} FROM ${stmt.tabla};`;
+      case "select_columns":
+        return `SELECT ${stmt.columnas.join(", ")} FROM ${stmt.tabla};`;
+      default:
+        return null;
+    }
+  }
+
+  function buscarNodoPorNombreEnArbol(nodos, nombreBuscado) {
+    let indice = 0;
+    while (indice < nodos.length) {
+      const nodo = nodos[indice];
+      if (nodo.nombre === nombreBuscado || nodo.name === nombreBuscado) {
+        return nodo;
+      }
+
+      if (Array.isArray(nodo.children) && nodo.children.length > 0) {
+        const nodoInterno = buscarNodoPorNombreEnArbol(
+          nodo.children,
+          nombreBuscado,
+        );
+        if (nodoInterno) {
+          return nodoInterno;
+        }
+      }
+
+      indice += 1;
+    }
+
+    return null;
+  }
+
+  function toBase64(buffer) {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+
+  function fromBase64(b64) {
+    const binary = window.atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  async function obtenerWasmBase64() {
+    try {
+      const response = await fetch("/sql-wasm.wasm");
+      if (!response.ok) {
+        return "";
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      return toBase64(arrayBuffer);
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function formatearResultadoSelect(resultados) {
+    if (!Array.isArray(resultados) || resultados.length === 0) {
+      return "[]";
+    }
+
+    const bloque = resultados[0];
+    if (
+      !bloque ||
+      !Array.isArray(bloque.columns) ||
+      !Array.isArray(bloque.values)
+    ) {
+      return "[]";
+    }
+
+    if (bloque.columns.length === 1) {
+      return JSON.stringify(
+        bloque.values.map((fila) => fila[0]),
+        null,
+        2,
+      );
+    }
+
+    return JSON.stringify(
+      bloque.values.map((fila) => {
+        const objeto = {};
+        let indice = 0;
+        while (indice < bloque.columns.length) {
+          objeto[bloque.columns[indice]] = fila[indice];
+          indice += 1;
+        }
+        return objeto;
+      }),
+      null,
+      2,
+    );
+  }
+
+  async function sendCommand() {
     const command = entradaConsola.trim();
     if (!command) return;
 
@@ -623,25 +771,151 @@
       return;
     }
 
-    let response = "Comando recibido por el servicio de base de datos.";
-    const lowerCommand = command.toLowerCase();
-
-    if (lowerCommand.startsWith("select")) {
-      response = "Consulta ejecutada. Filas simuladas: 3.";
-    } else if (
-      lowerCommand.startsWith("insert") ||
-      lowerCommand.startsWith("update")
-    ) {
-      response = "Operacion aplicada correctamente (simulada).";
-    } else if (lowerCommand.startsWith("delete")) {
-      response = "Operacion DELETE aceptada con confirmacion simulada.";
-    }
-
-    historialConsola = [
-      ...historialConsola,
-      { clase: "output", text: response },
-    ];
     entradaConsola = "";
+
+    try {
+      // Parsing the DB command
+      dbParser.erroresSintacticos = [];
+      dbParser.erroresLexicos = [];
+      const astList = dbParser.parse(command);
+
+      if (
+        dbParser.erroresSintacticos.length > 0 ||
+        dbParser.erroresLexicos.length > 0
+      ) {
+        let errStr =
+          dbParser.erroresSintacticos.map((e) => e.mensaje).join(", ") ||
+          "Error de parseo DB";
+        throw new Error(errStr);
+      }
+
+      // Locate or initialize database.sqlite in arbol
+      let sqlFileId = null;
+      let sqlFileContent = "";
+      let sqlFileRef = null;
+      const nodoSql = buscarNodoPorNombreEnArbol(arbol, "database.sqlite");
+      if (nodoSql) {
+        sqlFileId = nodoSql.id;
+        sqlFileContent = nodoSql.contenido || nodoSql.content || "";
+        sqlFileRef = nodoSql;
+      }
+
+      // Initialize sql.js
+
+      let wasmBinary = null;
+      try {
+        const r = await fetch("/sql-wasm.wasm");
+        if (r.ok) wasmBinary = await r.arrayBuffer();
+      } catch (e) {
+        // No se pudo cargar localmente, se usará la CDN
+      }
+      const SQL = await initSqlJs({
+        wasmBinary,
+        locateFile: (file) =>
+          wasmBinary
+            ? `/sql-wasm.wasm`
+            : `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.14.1/${file}`,
+      });
+      let dbInstance;
+      if (sqlFileContent && sqlFileContent.length > 0) {
+        try {
+          dbInstance = new SQL.Database(fromBase64(sqlFileContent));
+        } catch (e) {
+          dbInstance = new SQL.Database();
+        }
+      } else {
+        dbInstance = new SQL.Database();
+      }
+
+      // Generate and run SQL for each statement
+      let lastResultRows = 0;
+      let resultadoConsulta = null;
+      for (const stmt of astList) {
+        const sqlStr = astToSql(stmt);
+        if (sqlStr) {
+          if (stmt.tipo === "select_column" || stmt.tipo === "select_columns") {
+            resultadoConsulta = dbInstance.exec(sqlStr);
+          } else {
+            dbInstance.run(sqlStr);
+          }
+          lastResultRows++;
+        }
+      }
+
+      // 5. Serialize DB and persist back to arbol
+      const binaryArr = dbInstance.export();
+      const base64Str = toBase64(binaryArr);
+
+      if (!sqlFileId) {
+        // Si no existe database.sqlite, crear el archivo en la raíz del proyecto y guardar el contenido
+        let rootId = null;
+        for (const node of arbol) {
+          if (node.tipo === TIPO_NODO.CARPETA && node.padreId === null) {
+            rootId = node.id;
+            break;
+          }
+        }
+        try {
+          const res = await crearArchivo(
+            idProyecto,
+            rootId,
+            "database.sqlite",
+            base64Str,
+          );
+          arbol = res.arbol;
+        } catch (e) {
+          const msg = e?.message || String(e);
+          if (msg.includes("Ya existe un nodo")) {
+            // Esto puede ocurrir si el archivo fue creado en otra pestaña o ventana. Intentamos encontrarlo en el arbol y actualizar su contenido.
+            function findByName(nodes, target) {
+              for (const n of nodes) {
+                if (
+                  (n.nombre && n.nombre === target) ||
+                  (n.name && n.name === target)
+                )
+                  return n;
+                if (n.children && Array.isArray(n.children)) {
+                  const found = findByName(n.children, target);
+                  if (found) return found;
+                }
+              }
+              return null;
+            }
+
+            const existing = findByName(arbol, "database.sqlite");
+            if (existing) {
+              sqlFileId = existing.id;
+              await guardarContenidoArchivo(idProyecto, sqlFileId, base64Str);
+              existing.contenido = base64Str;
+            } else {
+              throw e;
+            }
+          } else {
+            throw e;
+          }
+        }
+      } else {
+        await guardarContenidoArchivo(idProyecto, sqlFileId, base64Str);
+        const node = buscarNodoPorId(arbol, sqlFileId);
+        if (node) node.contenido = base64Str;
+      }
+
+      historialConsola = [
+        ...historialConsola,
+        {
+          clase: "output",
+          text:
+            resultadoConsulta !== null
+              ? formatearResultadoSelect(resultadoConsulta)
+              : "Comando recibido y BD actualizada exitosamente.",
+        },
+      ];
+    } catch (err) {
+      historialConsola = [
+        ...historialConsola,
+        { clase: "error", text: "Error procesando consola DB: " + err.message },
+      ];
+    }
   }
 
   function clearConsole() {
@@ -657,7 +931,17 @@
     // Implementar mapeo de código desde el árbol de archivos hacia el compilador
     const fuentes = extraerTodosLosArchivos(arbol);
     ultimasFuentesCompiladas = fuentes;
-    const resultados = await compilador.compilar(fuentes);
+
+    const fuentesCompilacion = {};
+    for (const [ruta, contenido] of Object.entries(fuentes)) {
+      const rutaNormalizada = String(ruta).toLowerCase();
+      if (rutaNormalizada.endsWith(".sqlite") || rutaNormalizada.endsWith(".db")) {
+        continue;
+      }
+      fuentesCompilacion[ruta] = contenido;
+    }
+
+    const resultados = await compilador.compilar(fuentesCompilacion);
 
     resultadosUltimaCompilacion = resultados;
     erroresCompilacion = resultados.errores || [];
@@ -700,11 +984,15 @@
 
     const zip = new JSZip();
     const res = resultadosUltimaCompilacion;
+    const wasmBase64 = await obtenerWasmBase64();
 
     // Crear bundle único y HTML de arranque
-    const indexHtml = compilador.generarBundle(res);
+    const indexHtml = compilador.generarBundle(res, { wasmBase64 });
     zip.file("index.html", indexHtml);
     zip.file("bundle.js", res.bundleJs || res.js || "");
+    if (wasmBase64) {
+      zip.file("sql-wasm.wasm", fromBase64(wasmBase64));
+    }
 
     // Incluir archivos .sqlite si forman parte del proyecto
     try {
@@ -718,14 +1006,31 @@
           let indiceValidacion = 0;
           while (indiceValidacion < trimmed.length && esBase64) {
             const c = trimmed[indiceValidacion];
-            if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c === '+' || c === '/' || c === '=' || c === '\r' || c === '\n')) {
+            if (
+              !(
+                (c >= "A" && c <= "Z") ||
+                (c >= "a" && c <= "z") ||
+                (c >= "0" && c <= "9") ||
+                c === "+" ||
+                c === "/" ||
+                c === "=" ||
+                c === "\r" ||
+                c === "\n"
+              )
+            ) {
               esBase64 = false;
             }
             indiceValidacion += 1;
           }
           if (esBase64) {
             // base64 -> convertir a bytes
-            const limpio = trimmed.split(' ').join('').split('\n').join('').split('\r').join('');
+            const limpio = trimmed
+              .split(" ")
+              .join("")
+              .split("\n")
+              .join("")
+              .split("\r")
+              .join("");
             const binary = atob(limpio);
             const arr = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++)
@@ -764,7 +1069,13 @@
     }
 
     // Añadir respaldo del código fuente (.yfera)
-    const nombreSinEspacios = nombreProyecto.split(' ').join('_').split('\t').join('_').split('\n').join('_');
+    const nombreSinEspacios = nombreProyecto
+      .split(" ")
+      .join("_")
+      .split("\t")
+      .join("_")
+      .split("\n")
+      .join("_");
     const backupData = JSON.stringify(
       {
         nombre: nombreProyecto,
@@ -779,7 +1090,13 @@
     const link = document.createElement("a");
     link.href = URL.createObjectURL(content);
     link.download = `${nombreSinEspacios}_export.zip`;
+    document.body.appendChild(link);
     link.click();
+
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    }, 100);
 
     historialConsola = [
       ...historialConsola,
@@ -787,14 +1104,15 @@
     ];
   }
 
-  function previewProject() {
+  async function previewProject() {
     if (!resultadosUltimaCompilacion || !resultadosUltimaCompilacion.ok) {
       alert("Primero debes realizar una compilación exitosa.");
       return;
     }
 
     const res = resultadosUltimaCompilacion;
-    const previewHtml = compilador.generarVistaPrevia(res);
+    const wasmBase64 = await obtenerWasmBase64();
+    const previewHtml = compilador.generarVistaPrevia(res, { wasmBase64 });
     const blob = new Blob([previewHtml], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const ventana = window.open(url, "_blank", "noopener,noreferrer");
@@ -829,7 +1147,13 @@
     const blob = new Blob([data], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    const nombreSinEspacios = nombreProyecto.split(' ').join('_').split('\t').join('_').split('\n').join('_');
+    const nombreSinEspacios = nombreProyecto
+      .split(" ")
+      .join("_")
+      .split("\t")
+      .join("_")
+      .split("\n")
+      .join("_");
     link.download = `${nombreSinEspacios}.yfera`;
     link.click();
 

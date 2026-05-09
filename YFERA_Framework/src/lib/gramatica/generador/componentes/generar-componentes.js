@@ -8,6 +8,169 @@ class GeneradorComponentes {
     this.componentes = [];
   }
 
+  esNodoControl(nodo) {
+    if (!nodo || typeof nodo !== 'object') {
+      return false;
+    }
+
+    return nodo.tipo === 'if' || nodo.tipo === 'for' || nodo.tipo === 'for_each_simple' || nodo.tipo === 'for_each_track' || nodo.tipo === 'while' || nodo.tipo === 'switch';
+  }
+
+  obtenerBloque(nodo, clavePrincipal = 'cuerpo', claveAlterna = 'sentencias') {
+    if (!nodo || typeof nodo !== 'object') {
+      return [];
+    }
+
+    if (Array.isArray(nodo[clavePrincipal])) {
+      return nodo[clavePrincipal];
+    }
+
+    if (Array.isArray(nodo[claveAlterna])) {
+      return nodo[claveAlterna];
+    }
+
+    return [];
+  }
+
+  obtenerNombreVariable(valor) {
+    if (valor === null || valor === undefined) {
+      return '';
+    }
+
+    const texto = String(valor);
+    return this.quitarPrefijo(texto, '$');
+  }
+
+  obtenerTextoSimple(valor) {
+    if (valor === null || valor === undefined) {
+      return '';
+    }
+
+    let texto = String(valor);
+    texto = this.eliminarComillas(texto);
+    return texto;
+  }
+
+  generarListaElementos(elementos, ctx, indentSize) {
+    let codigo = '';
+    let indice = 0;
+    while (indice < elementos.length) {
+      codigo += this.generarElemento(elementos[indice], ctx, indentSize);
+      indice += 1;
+    }
+    return codigo;
+  }
+
+  generarBloqueCondicional(nodo, ctx, indentSize) {
+    const bloquesElseIf = Array.isArray(nodo.elseIfs) ? nodo.elseIfs : [];
+    const bloqueElse = nodo.else ? this.obtenerBloque(nodo.else, 'cuerpo', 'sentencias') : [];
+
+    let codigo = `${' '.repeat(indentSize)}if (${this.generarExpresion(nodo.condicion)}) {\n`;
+    codigo += this.generarListaElementos(this.obtenerBloque(nodo, 'cuerpo', 'sentencias'), ctx, indentSize + 2);
+    codigo += `${' '.repeat(indentSize)}}`;
+
+    let indice = 0;
+    while (indice < bloquesElseIf.length) {
+      const parte = bloquesElseIf[indice];
+      codigo += ` else if (${this.generarExpresion(parte.condicion)}) {\n`;
+      codigo += this.generarListaElementos(this.obtenerBloque(parte, 'cuerpo', 'sentencias'), ctx, indentSize + 2);
+      codigo += `${' '.repeat(indentSize)}}`;
+      indice += 1;
+    }
+
+    if (bloqueElse.length > 0) {
+      codigo += ` else {\n`;
+      codigo += this.generarListaElementos(bloqueElse, ctx, indentSize + 2);
+      codigo += `${' '.repeat(indentSize)}}`;
+    }
+
+    return codigo + '\n';
+  }
+
+  generarBloqueSwitch(nodo, ctx, indentSize) {
+    const indent = ' '.repeat(indentSize);
+    let codigo = `${indent}switch (${this.generarExpresion(nodo.variable)}) {\n`;
+
+    const casos = Array.isArray(nodo.casos) ? nodo.casos : [];
+    let indice = 0;
+    while (indice < casos.length) {
+      const caso = casos[indice];
+      codigo += `${indent}  case ${this.generarExpresion(caso.valor)}:\n`;
+      codigo += this.generarListaElementos(this.obtenerBloque(caso, 'cuerpo', 'sentencias'), ctx, indentSize + 4);
+      codigo += `${indent}    break;\n`;
+      indice += 1;
+    }
+
+    if (nodo.defecto && Array.isArray(nodo.defecto.cuerpo)) {
+      codigo += `${indent}  default:\n`;
+      codigo += this.generarListaElementos(nodo.defecto.cuerpo, ctx, indentSize + 4);
+      codigo += `${indent}    break;\n`;
+    }
+
+    codigo += `${indent}}\n`;
+    return codigo;
+  }
+
+  generarBloqueForEachSimple(nodo, ctx, indentSize) {
+    const indent = ' '.repeat(indentSize);
+    const nombreOrigen = this.obtenerNombreVariable(nodo.origen);
+    const nombreItem = this.obtenerNombreVariable(nodo.item);
+    const cuerpo = this.obtenerBloque(nodo, 'cuerpo', 'sentencias');
+    const vacio = this.obtenerBloque(nodo, 'vacio', 'sentencias');
+
+    let codigo = `${indent}{\n`;
+    codigo += `${indent}  const __lista = ${nombreOrigen};\n`;
+    codigo += `${indent}  if (Array.isArray(__lista) && __lista.length > 0) {\n`;
+    codigo += `${indent}    let __indiceLista = 0;\n`;
+    codigo += `${indent}    while (__indiceLista < __lista.length) {\n`;
+    codigo += `${indent}      const ${nombreItem} = __lista[__indiceLista];\n`;
+    codigo += this.generarListaElementos(cuerpo, ctx, indentSize + 6);
+    codigo += `${indent}      __indiceLista += 1;\n`;
+    codigo += `${indent}    }\n`;
+    codigo += `${indent}  } else {\n`;
+    codigo += this.generarListaElementos(vacio, ctx, indentSize + 4);
+    codigo += `${indent}  }\n`;
+    codigo += `${indent}}\n`;
+
+    return codigo;
+  }
+
+  generarBloqueForEachTrack(nodo, ctx, indentSize) {
+    const indent = ' '.repeat(indentSize);
+    const nombreIndice = this.obtenerNombreVariable(nodo.indice);
+    const pares = Array.isArray(nodo.pares) ? nodo.pares : [];
+    const cuerpo = this.obtenerBloque(nodo, 'cuerpo', 'sentencias');
+    const vacio = this.obtenerBloque(nodo, 'vacio', 'sentencias');
+
+    let codigo = `${indent}{\n`;
+    codigo += `${indent}  const __pares = [];\n`;
+
+    let indicePar = 0;
+    while (indicePar < pares.length) {
+      const par = pares[indicePar];
+      const origen = this.obtenerNombreVariable(par.origen);
+      const actual = this.obtenerNombreVariable(par.actual);
+      codigo += `${indent}  __pares.push({ origen: ${origen}, actual: ${actual} });\n`;
+      indicePar += 1;
+    }
+
+    codigo += `${indent}  if (__pares.length > 0) {\n`;
+    codigo += `${indent}    let ${nombreIndice} = 0;\n`;
+    codigo += `${indent}    while (${nombreIndice} < __pares.length) {\n`;
+    codigo += `${indent}      const __parActual = __pares[${nombreIndice}];\n`;
+    codigo += `${indent}      const __origen = __parActual.origen;\n`;
+    codigo += `${indent}      const __actual = __parActual.actual;\n`;
+    codigo += this.generarListaElementos(cuerpo, ctx, indentSize + 6);
+    codigo += `${indent}      ${nombreIndice} += 1;\n`;
+    codigo += `${indent}    }\n`;
+    codigo += `${indent}  } else {\n`;
+    codigo += this.generarListaElementos(vacio, ctx, indentSize + 4);
+    codigo += `${indent}  }\n`;
+    codigo += `${indent}}\n`;
+
+    return codigo;
+  }
+
   eliminarComillas(s) {
     if (s === null || s === undefined) return s;
     const str = String(s);
@@ -139,9 +302,16 @@ class GeneradorComponentes {
         }
         
         //* Reemplazar $var por ${var} para interpolación 
-        let contentString = nodo.contenido || "";
-        let interpContent = this.interpolateDollarVars(contentString);
-        codigo += `${indent}${currentVar}.textContent = \`${interpContent}\`\n`;
+        const contenido = nodo.contenido;
+        if (contenido && typeof contenido === 'object') {
+          //* expresión AST -> generar código JS y convertir a string
+          const exprCode = this.generarExpresion(contenido);
+          codigo += `${indent}${currentVar}.textContent = String(${exprCode});\n`;
+        } else {
+          const contentString = typeof contenido === 'string' ? contenido : '';
+          const interpContent = this.interpolateDollarVars(contentString);
+          codigo += `${indent}${currentVar}.textContent = \`${interpContent}\`;\n`;
+        }
         
         codigo += `${indent}${ctx.currentParent}.appendChild(${currentVar});\n`;
         break;
@@ -151,10 +321,30 @@ class GeneradorComponentes {
         if (nodo.estilos && nodo.estilos.length > 0) {
           codigo += `${indent}${currentVar}.className = "${nodo.estilos.join(' ')}";\n`;
         }
-        let src = nodo.fuentes && nodo.fuentes[0] ? nodo.fuentes[0].valor : '';
-        let interpSrc = this.interpolateDollarVars(src);
-        codigo += `${indent}${currentVar}.src = \`${interpSrc}\`\n`;
+        let fuente = nodo.fuentes && nodo.fuentes[0] ? nodo.fuentes[0].valor : '';
+        if (fuente && typeof fuente === 'object') {
+          codigo += `${indent}${currentVar}.src = String(${this.generarExpresion(fuente)});\n`;
+        } else {
+          const interpSrc = this.interpolateDollarVars(String(fuente || ''));
+          codigo += `${indent}${currentVar}.src = \`${interpSrc}\`;\n`;
+        }
         codigo += `${indent}${ctx.currentParent}.appendChild(${currentVar});\n`;
+        break;
+
+      case 'if':
+        codigo += this.generarBloqueCondicional(nodo, ctx, indentSize);
+        break;
+
+      case 'switch':
+        codigo += this.generarBloqueSwitch(nodo, ctx, indentSize);
+        break;
+
+      case 'for_each_simple':
+        codigo += this.generarBloqueForEachSimple(nodo, ctx, indentSize);
+        break;
+
+      case 'for_each_track':
+        codigo += this.generarBloqueForEachTrack(nodo, ctx, indentSize);
         break;
 
       case 'tabla':
@@ -336,21 +526,6 @@ class GeneradorComponentes {
         codigo += `${indent}${ctx.currentParent}.appendChild(${currentVar});\n`;
         break;
 
-      case 'if':
-        codigo += `${indent}if (${this.generarExpresion(nodo.condicion)}) {\n`;
-        for (const child of nodo.cuerpo) {
-          codigo += this.generarElemento(child, ctx, indentSize + 2);
-        }
-        codigo += `${indent}}\n`;
-        if (nodo.else) {
-          codigo += `${indent}else {\n`;
-          for (const child of nodo.else.cuerpo) {
-            codigo += this.generarElemento(child, ctx, indentSize + 2);
-          }
-          codigo += `${indent}}\n`;
-        }
-        break;
-
       default:
         codigo += `${indent}// Nodo desconocido o no implementado: ${nodo.tipo}\n`;
     }
@@ -359,9 +534,32 @@ class GeneradorComponentes {
   }
   
   generarExpresion(expr) {
-     if (!expr) return "true";
-     if (typeof expr === 'string') return expr;
-     if (expr.tipo === 'variable') return expr.id;
+     if (expr === null || expr === undefined) return "true";
+     if (typeof expr === 'boolean') return expr ? 'true' : 'false';
+     if (typeof expr === 'number') return String(expr);
+     if (typeof expr === 'string') {
+       const texto = expr.trim();
+       if (texto.length === 0) return 'true';
+
+       if (texto.charAt(0) === '$') {
+         return this.quitarPrefijo(texto, '$');
+       }
+
+       const primer = texto.charAt(0);
+       const ultimo = texto.charAt(texto.length - 1);
+       if ((primer === '"' && ultimo === '"') || (primer === '\'' && ultimo === '\'') || (primer === '`' && ultimo === '`')) {
+         return texto;
+       }
+
+       return JSON.stringify(texto);
+     }
+
+    if (expr.tipo === 'variable') return this.quitarPrefijo(expr.valor || expr.id || '', '$');
+    if (expr.tipo === 'id') return this.quitarPrefijo(expr.valor || '', '$');
+     if (expr.op) {
+       return `(${this.generarExpresion(expr.left)} ${expr.op} ${this.generarExpresion(expr.right)})`;
+     }
+
      return JSON.stringify(expr);
   }
 }
