@@ -2,6 +2,8 @@
 * Analizador semántico para los estilos
 */
 
+import { formatearError, extraerUbicacion } from './semantic-errors.js';
+
 class AnalizadorSemanticoEstilos {
 
     //* Declaracion de propiedades
@@ -10,14 +12,14 @@ class AnalizadorSemanticoEstilos {
         this.tablaSimbolos = [];
     }
 
-    agregarError(mensaje, extra = {}) {
-        this.errores.push({
-            tipo: 'Error Semántico',
-            mensaje,
-            linea: null,
-            columna: null,
-            ...extra
-        });
+    agregarError(mensaje, linea = null, columna = null, contexto = null) {
+        if (linea && typeof linea === 'object') {
+            const loc = extraerUbicacion(linea);
+            linea = loc.linea;
+            columna = columna || loc.columna;
+            contexto = contexto || loc.contexto;
+        }
+        this.errores.push(formatearError(mensaje, { tipo: 'Error Semántico (Estilos)', linea, columna, contexto }));
     }
 
     //* Inicializar las propiedades y analizar el AST
@@ -30,7 +32,7 @@ class AnalizadorSemanticoEstilos {
         }
 
         this.recolectarSelectores(ast);
-        this.validarSentencias(ast);
+        this.validarSentencias(ast, 0);
 
         return { ok: this.errores.length === 0, errores: this.errores, tablaSimbolos: this.tablaSimbolos.slice() };
     }
@@ -150,27 +152,33 @@ class AnalizadorSemanticoEstilos {
         return null;
     }
 
-    validarSentencias(sentencias) {
+    validarSentencias(sentencias, nivelAnidacion = 0) {
         for (let i = 0; i < sentencias.length; i++) {
             const s = sentencias[i];
             if (!s || !s.tipo) {
-                this.agregarError('Sentencia inválida');
+                this.agregarError('Sentencia inválida', s);
                 continue;
             }
 
             if (s.tipo === 'estilo') {
                 this.validarEstilo(s);
             } else if (s.tipo === 'for' || s.tipo === 'para') {
-                this.validarFor(s);
+                this.validarFor(s, nivelAnidacion);
             } else {
-                this.agregarError(`Tipo de sentencia no soportado: ${s.tipo}`);
+                this.agregarError(`Tipo de sentencia no soportado: ${s.tipo}`, s);
             }
         }
     }
 
-    validarFor(nodo) {
+    validarFor(nodo, nivelAnidacion = 0) {
+        
+        if (nivelAnidacion > 0) {
+            this.agregarError('No se permiten bucles for anidados en estilos', nodo);
+            return;
+        }
+
         if (typeof nodo.variable !== 'string' || nodo.variable.charAt(0) !== '$') {
-            this.agregarError('Variable de for inválida');
+            this.agregarError('Variable de for inválida', nodo);
         }
 
         const desdeExpr = nodo.desde || nodo.inicio;
@@ -180,7 +188,7 @@ class AnalizadorSemanticoEstilos {
 
         if (typeof desde === 'number' && typeof hasta === 'number') {
             if (!Number.isInteger(desde) || !Number.isInteger(hasta)) {
-                this.agregarError('Los límites del for deben ser enteros');
+                this.agregarError('Los límites del for deben ser enteros', nodo);
             } else {
                 let iteraciones = 0;
                 if (nodo.inclusivo) iteraciones = Math.abs(hasta - desde) + 1;
@@ -194,7 +202,7 @@ class AnalizadorSemanticoEstilos {
 
         const listaEstilos = nodo.estilos || nodo.propiedades;
         if (!Array.isArray(listaEstilos)) {
-            this.agregarError('El for debe contener estilos');
+            this.agregarError('El for debe contener estilos', nodo);
             return;
         }
 
@@ -205,28 +213,28 @@ class AnalizadorSemanticoEstilos {
 
     validarEstilo(estilo) {
         if (!estilo || estilo.tipo !== 'estilo') {
-            this.agregarError('Nodo de estilo inválido');
+            this.agregarError('Nodo de estilo inválido', estilo);
             return;
         }
 
         const selector = estilo.selector || estilo.nombre;
         if (!this.esSelectorValido(selector)) {
-            this.agregarError(`Selector inválido: ${String(selector)}`);
+            this.agregarError(`Selector inválido: ${String(selector)}`, estilo);
         }
 
         const extiende = estilo.extiende || estilo.heredaDe;
         if (extiende) {
             if (!this.esSelectorValido(extiende)) {
-                this.agregarError(`Selector inválido en extiende: ${String(extiende)}`);
+                this.agregarError(`Selector inválido en extiende: ${String(extiende)}`, estilo);
             }
 
             if (extiende === selector) {
-                this.agregarError(`Un estilo no puede extenderse a sí mismo: ${selector}`);
+                this.agregarError(`Un estilo no puede extenderse a sí mismo: ${selector}`, estilo);
             }
 
            if(typeof extiende === 'string' && extiende.indexOf('$') === -1) {
                 if (!this.existeEnTabla(extiende, 'selector')) {
-                    this.agregarError(`Selector no declarado en extiende: ${String(extiende)}`);
+                    this.agregarError(`Selector no declarado en extiende: ${String(extiende)}`, estilo);
                 }
             
            }

@@ -27,40 +27,76 @@ files.forEach(file => {
   let content = fs.readFileSync(filePath, 'utf8');
 
   // Corregir referencias a yylloc en funciones del usuario (bloque %{...%})
-  content = content.replace(
-    /const linea = yylloc\?\.[^;]+;/g,
-    'const linea = (typeof yylloc !== "undefined" && yylloc) ? (yylloc.first_line || yylineno || 0) : ((typeof yylineno !== "undefined") ? yylineno : 0);'
-  );
-  
-  content = content.replace(
-    /const columna = yylloc\?\.[^;]+;/g,
-    'const columna = (typeof yylloc !== "undefined" && yylloc) ? (yylloc.first_column ?? 0) : 0;'
-  );
+  //* buscamos las declaraciones y sustituimos hasta el siguiente ;.
+  let buscarYSustituir = [
+    {
+      clave: 'const linea =',
+      remplazo: 'const linea = (typeof yylloc !== "undefined" && yylloc) ? (yylloc.first_line || yylineno || 0) : ((typeof yylineno !== "undefined") ? yylineno : 0);'
+    },
+    {
+      clave: 'const columna =',
+      remplazo: 'const columna = (typeof yylloc !== "undefined" && yylloc) ? (yylloc.first_column ?? 0) : 0;'
+    },
+    {
+      clave: "const lexema =",
+      remplazo: 'const lexema = (typeof yytext !== "undefined") ? yytext : "";'
+    }
+  ];
 
-  content = content.replace(
-    /const lexema = yytext \|\| '';/g,
-    'const lexema = (typeof yytext !== "undefined") ? yytext : "";'
-  );
-
-  // Agregar seguridad a performAction si no está ya: inicializar variables Jison
-  if (!content.includes('var yyerrok = 0, yyclearin = 0;')) {
-    content = content.replace(
-      /performAction:\s*function anonymous\([^)]*\)\s*\{[\s\n]*/,
-      (match) => {
-        return match + 'var yyerrok = 0, yyclearin = 0;\n';
-      }
-    );
+  for (const item of buscarYSustituir) {
+    let idx = content.indexOf(item.clave);
+    while (idx !== -1) {
+      const semi = content.indexOf(';', idx);
+      if (semi === -1) break;
+      content = content.slice(0, idx) + item.remplazo + content.slice(semi + 1);
+      idx = content.indexOf(item.clave, idx + 1);
+    }
   }
 
-  // Extraer el nombre de la variable del parser
-  const varMatch = content.match(/var\s+(\w+)\s*=\s*\(function/);
-  const parserVarName = varMatch ? varMatch[1] : 'parser';
+  // * inicializar variables Jison
+  if (!content.includes('var yyerrok = 0, yyclearin = 0;')) {
+    const key = 'performAction:';
+    let p = content.indexOf(key);
+    if (p !== -1) {
+      const funcPos = content.indexOf('function anonymous', p);
+      if (funcPos !== -1) {
+        const bracePos = content.indexOf('{', funcPos);
+        if (bracePos !== -1) {
+          content = content.slice(0, bracePos + 1) + '\nvar yyerrok = 0, yyclearin = 0;\n' + content.slice(bracePos + 1);
+        }
+      }
+    }
+  }
 
-  // Remover la sección CommonJS del final si existe
-  content = content.replace(
-    /\n\nif \(typeof require !== 'undefined' && typeof exports !== 'undefined'\)[\s\S]*$/,
-    ''
-  );
+  //* Extraer el nombre de la variable del parser
+  let parserVarName = 'parser';
+  let searchIdx = 0;
+  while (true) {
+    const vIdx = content.indexOf('var ', searchIdx);
+    if (vIdx === -1) break;
+    let nameStart = vIdx + 4;
+    // leer identificador
+    let nameEnd = nameStart;
+    while (nameEnd < content.length) {
+      const ch = content[nameEnd];
+      const isWord = (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch === '_';
+      if (isWord) nameEnd++; else break;
+    }
+    const candidate = content.substring(nameStart, nameEnd);
+    const rest = content.substring(nameEnd, nameEnd + 20);
+    if (rest.indexOf('= (function') !== -1 || rest.indexOf('=(function') !== -1) {
+      parserVarName = candidate || 'parser';
+      break;
+    }
+    searchIdx = nameEnd + 1;
+  }
+
+  //* Remover la sección CommonJS del final si existe
+  const commonjsKey = "\n\nif (typeof require !== 'undefined' && typeof exports !== 'undefined')";
+  const commonIdx = content.indexOf(commonjsKey);
+  if (commonIdx !== -1) {
+    content = content.substring(0, commonIdx);
+  }
 
   // Agregar exportación ES module al final si no existe
   if (!content.includes('export const parser')) {

@@ -2,18 +2,22 @@
  * Analizador semántico para los componentes de YFERA.
  */
 
+import { formatearError, extraerUbicacion } from './semantic-errors.js';
+
 class AnalizadorSemanticoComponentes {
   constructor() {
     this.errores = [];
     this.tablaSimbolos = [];
   }
 
-  agregarError(mensaje, linea = null) {
-    this.errores.push({
-      tipo: 'Error Semántico',
-      mensaje,
-      linea: linea
-    });
+  agregarError(mensaje, linea = null, columna = null, contexto = null) {
+    if (linea && typeof linea === 'object') {
+      const loc = extraerUbicacion(linea);
+      linea = loc.linea;
+      columna = columna || loc.columna;
+      contexto = contexto || loc.contexto;
+    }
+    this.errores.push(formatearError(mensaje, { tipo: 'Error Semántico (Componentes)', linea, columna, contexto }));
   }
 
   analizar(ast) {
@@ -45,7 +49,7 @@ class AnalizadorSemanticoComponentes {
       if (nodo.tipo === 'componente') {
         const nombre = nodo.nombre;
         if (this.existeEnTabla(nombre, 'componente')) {
-          this.agregarError(`Componente duplicado: ${nombre}`);
+          this.agregarError(`Componente duplicado: ${nombre}`, nodo);
         } else {
           this.registrarEnTabla(nombre, 'componente', {
             parametros: nodo.parametros || []
@@ -100,6 +104,7 @@ class AnalizadorSemanticoComponentes {
 
       case 'if':
         this.validarExpresion(nodo.condicion);
+       
         this.validarElementos(nodo.cuerpo);
         if (nodo.else) {
           this.validarElementos(nodo.else.cuerpo);
@@ -107,18 +112,22 @@ class AnalizadorSemanticoComponentes {
         break;
 
       case 'for':
-        const idVar = nodo.variable;
-        if (!this.existeEnTabla(idVar, 'variable')) {
-          this.registrarEnTabla(idVar, 'variable', { tipoDato: 'int' });
+        
+        if (nodo.cuerpo && Array.isArray(nodo.cuerpo)) {
+          this.validarElementos(nodo.cuerpo);
         }
-        this.validarExpresion(nodo.desde);
-        this.validarExpresion(nodo.hasta);
-        this.validarElementos(nodo.cuerpo);
+        break;
+
+      case 'while':
+        
+        if (nodo.cuerpo && Array.isArray(nodo.cuerpo)) {
+          this.validarElementos(nodo.cuerpo);
+        }
         break;
 
       case 'declaracion':
       case 'variable_decl':
-        this.agregarError(`Error: No se permiten declaraciones de variables dentro de componentes. Solo se permiten variables globales, gracias por su compresion :).`);
+        this.agregarError(`Error: No se permiten declaraciones de variables dentro de componentes. Solo se permiten variables globales.`, nodo);
         break;
     }
   }
@@ -129,7 +138,7 @@ class AnalizadorSemanticoComponentes {
     if (exp.tipo === 'variable') {
       const nombreVar = exp.valor.replace('$', '');
       if (!this.existeEnTabla(nombreVar, 'variable')) {
-        this.agregarError(`Variable no declarada: ${nombreVar} aqui no hacemos esto :v`);
+        this.agregarError(`Variable no declarada: ${nombreVar} aqui no hacemos esto :v`, exp);
       }
     } else if (exp.op) {
       this.validarExpresion(exp.left);

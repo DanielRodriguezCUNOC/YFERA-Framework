@@ -15,10 +15,11 @@ class GeneradorDB {
     codigo += 'const YFERA_DB = {\n';
     codigo += '  tablas: {},\n';
     codigo += '  initTable(nombre, cols) { if(!this.tablas[nombre]) this.tablas[nombre] = []; },\n';
-    codigo += '  insert(nombre, valores) { this.initTable(nombre); this.tablas[nombre].push(valores); },\n';
-    codigo += '  delete(nombre, id) { if(this.tablas[nombre]) this.tablas[nombre].splice(id, 1); },\n';
-    codigo += '  select(nombre, columna, fila) { return this.tablas[nombre] && this.tablas[nombre][fila] ? this.tablas[nombre][fila][columna] : null; }\n';
-    codigo += '};\n\n';
+    codigo += '  insert(nombre, valores) { this.initTable(nombre); this.tablas[nombre].push(valores); return 1; },\n';
+    codigo += '  delete(nombre, id) { if(this.tablas[nombre]) this.tablas[nombre].splice(id, 1); return 1; },\n';
+    codigo += '  select(nombre, columna, fila) { if(!this.tablas[nombre]) return []; if (fila === undefined || fila === null) return this.tablas[nombre].slice(); if(this.tablas[nombre][fila]) return [this.tablas[nombre][fila]]; return []; }\n';
+    codigo += '};\n';
+    codigo += 'if (typeof globalThis !== "undefined") { globalThis.YFERA_DB = YFERA_DB; }\n\n';
 
     let i = 0;
     while (i < ast.length) {
@@ -40,10 +41,10 @@ class GeneradorDB {
       case 'insert':
         const valoresObj = {};
         for (const v of nodo.valores) valoresObj[v.columna] = v.valor;
-        return `YFERA_DB.insert("${nodo.tabla}", ${JSON.stringify(valoresObj)});`;
+        return `YFERA.executeDB('insert', "${nodo.tabla}", ${JSON.stringify(valoresObj)});`;
 
       case 'delete':
-        return `YFERA_DB.delete("${nodo.tabla}", ${nodo.id});`;
+        return `YFERA.executeDB('delete', "${nodo.tabla}", ${nodo.id});`;
 
       default:
         return `// Operación DB no soportada: ${nodo.tipo}`;

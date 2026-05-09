@@ -167,6 +167,7 @@ class CompiladorMaestro {
       html: '',
       css: '',
       js: '',
+        bundleJs: '',
       errores: []
     };
 
@@ -278,7 +279,7 @@ class CompiladorMaestro {
           }
         } else {
           simbolosCruzados.componentes = resSemantico.tablaSimbolos;
-          resultados.js += generadorComponentes.generar(astComponentesGlobal) + '\n';
+          resultados.js += generadorComponentes.generar(astComponentesGlobal, { exportar: false }) + '\n';
         }
       }
 
@@ -294,6 +295,7 @@ class CompiladorMaestro {
         }
       }
 
+      resultados.bundleJs = this.generarBundleJs(resultados);
       resultados.html = this.generarBundle(resultados);
 
       resultados.ok = this.errores.length === 0;
@@ -309,7 +311,7 @@ class CompiladorMaestro {
   }
 
   /**
-   * Genera el HTML final tipo SPA (en linea asi como Svelte jaja).
+   * Genera el HTML para cargar el bundle.js
    */
   generarBundle(resultados) {
     return `
@@ -318,18 +320,152 @@ class CompiladorMaestro {
 <head>
     <meta charset="UTF-8">
     <title>YFERA App</title>
-    <style>
-        ${resultados.css}
-    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <script src="bundle.js"></script>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Genera una vista previa autocontenida con el bundle inline.
+   */
+  generarVistaPrevia(resultados) {
+    const bundleJs = resultados.bundleJs || resultados.js || '';
+    return `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vista previa YFERA</title>
 </head>
 <body>
     <div id="app"></div>
     <script>
-        ${resultados.js}
+${bundleJs}
     </script>
 </body>
 </html>
     `;
+  }
+
+  /**
+   * Genera un único archivo JS autocontenido con runtime, DB, componentes,
+   * lógica principal e inyección de CSS.
+   */
+  generarBundleJs(resultados) {
+    const css = JSON.stringify(resultados.css || '');
+    const runtime = this.generarRuntimeBundle();
+    const logica = resultados.js || '';
+
+    return `
+${runtime}
+
+// CSS embebido por el compilador
+const __YFERA_CSS = ${css};
+if (typeof document !== 'undefined' && __YFERA_CSS) {
+  let __style = document.getElementById('__yfera_bundle_styles__');
+  if (!__style) {
+    __style = document.createElement('style');
+    __style.id = '__yfera_bundle_styles__';
+    __style.textContent = __YFERA_CSS;
+    document.head.appendChild(__style);
+  }
+}
+
+${logica}
+`;
+  }
+
+  /**
+   * Runtime browser-safe para el bundle único.
+   */
+  generarRuntimeBundle() {
+    return `const YFERA = (() => {
+  const runtime = {
+    _functions: new Map(),
+    _components: new Map(),
+    _globals: Object.create(null),
+
+    registerFunction(name, fn) {
+      if (!name) throw new Error('registerFunction: name required');
+      this._functions.set(name, fn);
+      try { globalThis[name] = fn; } catch (e) {}
+    },
+
+    registerComponent(name, fn) {
+      if (!name) throw new Error('registerComponent: name required');
+      this._components.set(name, fn);
+      try { globalThis[name] = fn; } catch (e) {}
+    },
+
+    getSymbol(name) {
+      if (!name) return undefined;
+      if (this._functions.has(name)) return this._functions.get(name);
+      if (this._components.has(name)) return this._components.get(name);
+      return globalThis[name];
+    },
+
+    setGlobal(name, value) {
+      this._globals[name] = value;
+      try { globalThis[name] = value; } catch (e) {}
+    },
+
+    getGlobal(name) {
+      return this._globals[name] !== undefined ? this._globals[name] : globalThis[name];
+    },
+
+    execute(name, ...args) {
+      const fn = this.getSymbol(name);
+      if (typeof fn !== 'function') {
+        const err = new Error('Symbol ' + name + ' is not a function');
+        err.code = 'NOT_FUNCTION';
+        throw err;
+      }
+      try {
+        return fn(...args);
+      } catch (e) {
+        const err = e instanceof Error ? e : new Error(String(e));
+        throw err;
+      }
+    },
+
+    executeDB(op, ...args) {
+      const db = typeof globalThis.YFERA_DB !== 'undefined' ? globalThis.YFERA_DB : (this._db || null);
+      if (!db) {
+        const err = new Error('YFERA_DB no disponible');
+        err.code = 'NO_DB';
+        throw err;
+      }
+      if (typeof db[op] !== 'function') {
+        const err = new Error('Operación DB ' + op + ' no existe');
+        err.code = 'DB_NOOP';
+        throw err;
+      }
+      try {
+        const res = db[op](...args);
+        if (Array.isArray(res)) return { rows: res, count: res.length };
+        if (res === undefined || res === null) return { rows: [], count: 1 };
+        if (typeof res === 'number') return { count: res, rows: [] };
+        if (typeof res === 'object') {
+          if ('rows' in res || 'count' in res) return res;
+          return { rows: [res], count: 1 };
+        }
+        return { rows: [res], count: 1 };
+      } catch (e) {
+        const err = e instanceof Error ? e : new Error(String(e));
+        err.code = 'DB_ERROR';
+        throw err;
+      }
+    }
+  };
+
+  try { globalThis.YFERA = globalThis.YFERA || runtime; } catch (e) {}
+  return globalThis.YFERA;
+})();`;
   }
 }
 
