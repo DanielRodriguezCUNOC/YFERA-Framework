@@ -331,6 +331,7 @@ class CompiladorMaestro {
 
   /**
    * Genera una vista previa autocontenida con el bundle inline.
+   * Carga sql.js para soporte de .sqlite.
    */
   generarVistaPrevia(resultados) {
     const bundleJs = resultados.bundleJs || resultados.js || '';
@@ -344,6 +345,7 @@ class CompiladorMaestro {
 </head>
 <body>
     <div id="app"></div>
+    <script src="https://sql.js.org/dist/sql-wasm.js"><\/script>
     <script>
 ${bundleJs}
     </script>
@@ -381,7 +383,7 @@ ${logica}
   }
 
   /**
-   * Runtime browser-safe para el bundle único.
+   * Runtime browser-safe para el bundle único con sql.js + IndexedDB.
    */
   generarRuntimeBundle() {
     return `const YFERA = (() => {
@@ -389,6 +391,8 @@ ${logica}
     _functions: new Map(),
     _components: new Map(),
     _globals: Object.create(null),
+    _sqlDb: null,
+    _dbReady: false,
 
     registerFunction(name, fn) {
       if (!name) throw new Error('registerFunction: name required');
@@ -433,8 +437,86 @@ ${logica}
       }
     },
 
+    async initDb() {
+      if (this._dbReady) return;
+      try {
+        if (typeof initSqlJs === 'undefined') {
+          console.warn('sql.js no disponible; BD funcionará en modo lectura.');
+          return;
+        }
+        const SQL = await initSqlJs();
+        let data = null;
+        try {
+          const idb = indexedDB.open('YFERA_DB', 1);
+          await new Promise((res, rej) => {
+            idb.onsuccess = () => {
+              const store = idb.result.transaction('sqlite', 'readonly').objectStore('sqlite');
+              const req = store.get('main');
+              req.onsuccess = () => { data = req.result ? req.result.data : null; res(); };
+              req.onerror = rej;
+            };
+            idb.onerror = rej;
+          });
+        } catch (e) {
+          console.warn('IndexedDB no disponible:', e);
+        }
+        if (data) {
+          this._sqlDb = new SQL.Database(new Uint8Array(data));
+        } else {
+          this._sqlDb = new SQL.Database();
+        }
+        this._dbReady = true;
+      } catch (e) {
+        console.error('Error inicializando DB:', e);
+      }
+    },
+
+    async saveDb() {
+      if (!this._sqlDb || !this._dbReady) return;
+      try {
+        const data = this._sqlDb.export();
+        const idb = indexedDB.open('YFERA_DB', 1);
+        await new Promise((res, rej) => {
+          idb.onsuccess = () => {
+            const tx = idb.result.transaction('sqlite', 'readwrite');
+            const store = tx.objectStore('sqlite');
+            store.put({ id: 'main', data: Array.from(data) });
+            tx.oncomplete = res;
+            tx.onerror = rej;
+          };
+          idb.onerror = () => {
+            const req = indexedDB.open('YFERA_DB', 1);
+            req.onupgradeneeded = (e) => {
+              e.target.result.createObjectStore('sqlite', { keyPath: 'id' });
+            };
+            res();
+          };
+        });
+      } catch (e) {
+        console.warn('No se pudo guardar en IndexedDB:', e);
+      }
+    },
+
     executeDB(op, ...args) {
-      const db = typeof globalThis.YFERA_DB !== 'undefined' ? globalThis.YFERA_DB : (this._db || null);
+      if (op === 'raw' && this._sqlDb && this._dbReady) {
+        try {
+          const query = args[0];
+          if (!query) throw new Error('Query no proporcionada');
+          const stmts = this._sqlDb.prepare(query);
+          const results = [];
+          while (stmts.step()) {
+            results.push(stmts.getAsObject());
+          }
+          stmts.free();
+          this.saveDb();
+          return { rows: results, count: results.length };
+        } catch (e) {
+          const err = e instanceof Error ? e : new Error(String(e));
+          err.code = 'DB_ERROR';
+          throw err;
+        }
+      }
+      const db = typeof globalThis.YFERA_DB !== 'undefined' ? globalThis.YFERA_DB : null;
       if (!db) {
         const err = new Error('YFERA_DB no disponible');
         err.code = 'NO_DB';
@@ -462,6 +544,11 @@ ${logica}
       }
     }
   };
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => runtime.initDb());
+    if (document.readyState !== 'loading') runtime.initDb();
+  }
 
   try { globalThis.YFERA = globalThis.YFERA || runtime; } catch (e) {}
   return globalThis.YFERA;

@@ -21,7 +21,10 @@
     guardarEstadoDeInterfaz,
     renombrarNodo,
   } from "$lib/arbol/arbol.service.js";
-  import { obtenerPrimerNodoArchivo, extraerTodosLosArchivos } from "$lib/arbol/arbol.selector.js";
+  import {
+    obtenerPrimerNodoArchivo,
+    extraerTodosLosArchivos,
+  } from "$lib/arbol/arbol.selector.js";
   import { TIPO_NODO } from "$lib/arbol/arbol.types.js";
   import { compilador } from "$lib/gramatica/compilador-maestro";
   import JSZip from "jszip";
@@ -60,6 +63,7 @@
 
   let erroresCompilacion = $state([]);
   let resultadosUltimaCompilacion = $state(null);
+  let ultimasFuentesCompiladas = null;
 
   function construirPestanasAbiertas() {
     const pestanas = [];
@@ -652,8 +656,9 @@
 
     // Implementar mapeo de código desde el árbol de archivos hacia el compilador
     const fuentes = extraerTodosLosArchivos(arbol);
+    ultimasFuentesCompiladas = fuentes;
     const resultados = await compilador.compilar(fuentes);
-    
+
     resultadosUltimaCompilacion = resultados;
     erroresCompilacion = resultados.errores || [];
 
@@ -701,17 +706,79 @@
     zip.file("index.html", indexHtml);
     zip.file("bundle.js", res.bundleJs || res.js || "");
 
+    // Incluir archivos .sqlite si forman parte del proyecto
+    try {
+      const fuentesAll = extraerTodosLosArchivos(arbol);
+      for (const [ruta, contenido] of Object.entries(fuentesAll)) {
+        if (ruta && ruta.toLowerCase().endsWith(".sqlite")) {
+          // contenido puede estar en base64 o texto
+          const trimmed = typeof contenido === "string" ? contenido.trim() : "";
+          let data;
+          let esBase64 = trimmed.length % 4 === 0 && trimmed.length > 0;
+          let indiceValidacion = 0;
+          while (indiceValidacion < trimmed.length && esBase64) {
+            const c = trimmed[indiceValidacion];
+            if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c === '+' || c === '/' || c === '=' || c === '\r' || c === '\n')) {
+              esBase64 = false;
+            }
+            indiceValidacion += 1;
+          }
+          if (esBase64) {
+            // base64 -> convertir a bytes
+            const limpio = trimmed.split(' ').join('').split('\n').join('').split('\r').join('');
+            const binary = atob(limpio);
+            const arr = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++)
+              arr[i] = binary.charCodeAt(i);
+            data = arr;
+          } else {
+            // fallback: tratar como texto y guardar como UTF-8
+            data = new TextEncoder().encode(String(contenido));
+          }
+          zip.file(ruta, data);
+        }
+      }
+    } catch (err) {
+      console.warn("No se pudo incluir archivos .sqlite automáticamente:", err);
+    }
+
+    // Incluir archivos .sqlite (binarios) si fueron parte de la última compilación
+    if (ultimasFuentesCompiladas) {
+      for (const [ruta, contenido] of Object.entries(
+        ultimasFuentesCompiladas,
+      )) {
+        if (
+          typeof ruta === "string" &&
+          (ruta.endsWith(".sqlite") || ruta.endsWith(".db"))
+        ) {
+          try {
+            zip.file(ruta, contenido);
+          } catch (e) {
+            const blob = new Blob([contenido], {
+              type: "application/octet-stream",
+            });
+            zip.file(ruta, blob);
+          }
+        }
+      }
+    }
+
     // Añadir respaldo del código fuente (.yfera)
-    const backupData = JSON.stringify({
-      nombre: nombreProyecto,
-      arbol: arbol
-    }, null, 2);
-    zip.file(`${nombreProyecto.replace(/\s+/g, "_")}.yfera`, backupData);
+    const nombreSinEspacios = nombreProyecto.split(' ').join('_').split('\t').join('_').split('\n').join('_');
+    const backupData = JSON.stringify(
+      {
+        nombre: nombreProyecto,
+        arbol: arbol,
+      },
+      null,
+      2,
+    );
+    zip.file(`${nombreSinEspacios}.yfera`, backupData);
 
     const content = await zip.generateAsync({ type: "blob" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(content);
-    link.download = `${nombreProyecto.replace(/\s+/g, "_")}_export.zip`;
+    link.download = `${nombreSinEspacios}_export.zip`;
     link.click();
 
     historialConsola = [
@@ -750,20 +817,28 @@
   }
 
   function exportProjectState() {
-    const data = JSON.stringify({
-      nombre: nombreProyecto,
-      arbol: arbol
-    }, null, 2);
-    
+    const data = JSON.stringify(
+      {
+        nombre: nombreProyecto,
+        arbol: arbol,
+      },
+      null,
+      2,
+    );
+
     const blob = new Blob([data], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `${nombreProyecto.replace(/\s+/g, "_")}.yfera`;
+    const nombreSinEspacios = nombreProyecto.split(' ').join('_').split('\t').join('_').split('\n').join('_');
+    link.download = `${nombreSinEspacios}.yfera`;
     link.click();
 
     historialConsola = [
       ...historialConsola,
-      { clase: "system", text: "Copia de seguridad (.yfera) generada y descargada." },
+      {
+        clase: "system",
+        text: "Copia de seguridad (.yfera) generada y descargada.",
+      },
     ];
   }
 
@@ -780,7 +855,10 @@
           if (data.nombre) nombreProyecto = data.nombre;
           historialConsola = [
             ...historialConsola,
-            { clase: "system", text: `Proyecto "${nombreProyecto}" cargado con éxito.` },
+            {
+              clase: "system",
+              text: `Proyecto "${nombreProyecto}" cargado con éxito.`,
+            },
           ];
         } else {
           alert("Archivo .yfera inválido.");
@@ -820,7 +898,9 @@
         Importar (.yfera)
         <input type="file" accept=".yfera" onchange={handleImport} hidden />
       </label>
-      <button class="ghost" onclick={exportProjectState}>Respaldar (.yfera)</button>
+      <button class="ghost" onclick={exportProjectState}
+        >Respaldar (.yfera)</button
+      >
       <button class="ghost" onclick={previewProject}>Previsualizar</button>
       <button class="ghost" onclick={exportProject}>Exportar (ZIP)</button>
       <button onclick={compileProject}>Compilar</button>
