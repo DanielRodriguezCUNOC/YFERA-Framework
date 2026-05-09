@@ -2,6 +2,8 @@
  * Analizador semántico para la lógica principal de YFERA.
  */
 
+import { formatearError, extraerUbicacion } from './semantic-errors.js';
+
 class AnalizadorSemanticoPrincipal {
   constructor(tablasSimbolosCruzadas = {}) {
     this.errores = [];
@@ -10,12 +12,15 @@ class AnalizadorSemanticoPrincipal {
     this.tablasDeclaradas = tablasSimbolosCruzadas.tablas || [];
   }
 
-  agregarError(mensaje, linea = null) {
-    this.errores.push({
-      tipo: 'Error Semántico (Principal)',
-      mensaje,
-      linea: linea
-    });
+  agregarError(mensaje, linea = null, columna = null, contexto = null) {
+    if (linea && typeof linea === 'object') {
+      const loc = extraerUbicacion(linea);
+      linea = loc.linea;
+      columna = columna || loc.columna;
+      contexto = contexto || loc.contexto;
+    }
+
+    this.errores.push(formatearError(mensaje, { tipo: 'Error Semántico (Principal)', linea, columna, contexto }));
   }
 
   analizar(ast) {
@@ -40,7 +45,7 @@ class AnalizadorSemanticoPrincipal {
     };
   }
 
-  validarSentencia(nodo, enBloque) {
+  validarSentencia(nodo, enBloque, nivelAnidacion = 0) {
     if (!nodo) return;
 
     switch (nodo.tipo) {
@@ -50,18 +55,20 @@ class AnalizadorSemanticoPrincipal {
 
       case 'if':
       case 'while':
-        // Al entrar en un cuerpo de bloque, enBloque = true
-        this.validarSentencias(nodo.cuerpo, true);
-        if (nodo.else) this.validarSentencias(nodo.else.cuerpo, true);
+        this.validarExpresion(nodo.condicion);
+        this.validarSentencias(nodo.cuerpo, true, nivelAnidacion + 1);
+        if (nodo.else) {
+          this.validarSentencias(nodo.else.cuerpo, true, nivelAnidacion + 1);
+        }
         break;
 
       case 'variable_decl':
         if (enBloque) {
-          this.agregarError(`Error: No se permiten declaraciones de variables dentro de bloques (${nodo.tipo}). Solo se permiten declaraciones globales.`);
+          this.agregarError(`Error: No se permiten declaraciones de variables dentro de bloques (${nodo.tipo}). Solo se permiten declaraciones globales.`, nodo);
         } else {
           const id = nodo.id;
           if (this.existeEnTabla(id, 'variable')) {
-            this.agregarError(`Variable duplicada: ${id}`);
+            this.agregarError(`Variable duplicada: ${id}`, nodo);
           } else {
             this.registrarEnTabla(id, 'variable', { tipoDato: nodo.tipoDato });
           }
@@ -69,16 +76,15 @@ class AnalizadorSemanticoPrincipal {
         break;
 
       case 'for':
-        // El for tiene una variable de control, pero el cuerpo no puede tener declaraciones
-        this.validarSentencias(nodo.cuerpo, true);
+        this.validarSentencias(nodo.cuerpo, true, nivelAnidacion + 1);
         break;
     }
   }
 
-  validarSentencias(nodos, enBloque) {
+  validarSentencias(nodos, enBloque, nivelAnidacion = 0) {
     let i = 0;
     while (Array.isArray(nodos) && i < nodos.length) {
-      this.validarSentencia(nodos[i], enBloque);
+      this.validarSentencia(nodos[i], enBloque, nivelAnidacion);
       i += 1;
     }
   }
@@ -86,7 +92,7 @@ class AnalizadorSemanticoPrincipal {
   validarRendereo(invocacion) {
     const nombre = invocacion.componente;
     if (!this.existeComponente(nombre)) {
-      this.agregarError(`Se intenta renderizar un componente no declarado: ${nombre}`);
+      this.agregarError(`Se intenta renderizar un componente no declarado: ${nombre}`, invocacion);
     }
   }
 
@@ -97,6 +103,19 @@ class AnalizadorSemanticoPrincipal {
       idx += 1;
     }
     return false;
+  }
+
+  validarExpresion(exp) {
+    if (!exp) return;
+    if (exp.tipo === 'variable') {
+      const nombreVar = exp.valor ? exp.valor.toString().replace('$', '') : '';
+      if (nombreVar && !this.existeEnTabla(nombreVar, 'variable')) {
+        this.agregarError(`Variable no declarada: ${nombreVar}`, exp);
+      }
+    } else if (exp.op && (exp.left || exp.right)) {
+      this.validarExpresion(exp.left);
+      this.validarExpresion(exp.right);
+    }
   }
 
   registrarEnTabla(nombre, tipo, info = {}) {

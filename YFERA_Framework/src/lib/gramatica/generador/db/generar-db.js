@@ -18,7 +18,8 @@ class GeneradorDB {
     codigo += '  insert(nombre, valores) { this.initTable(nombre); this.tablas[nombre].push(valores); return 1; },\n';
     codigo += '  delete(nombre, id) { if(this.tablas[nombre]) this.tablas[nombre].splice(id, 1); return 1; },\n';
     codigo += '  select(nombre, columna, fila) { if(!this.tablas[nombre]) return []; if (fila === undefined || fila === null) return this.tablas[nombre].slice(); if(this.tablas[nombre][fila]) return [this.tablas[nombre][fila]]; return []; }\n';
-    codigo += '};\n\n';
+    codigo += '};\n';
+    codigo += 'if (typeof globalThis !== "undefined") { globalThis.YFERA_DB = YFERA_DB; }\n\n';
 
     let i = 0;
     while (i < ast.length) {

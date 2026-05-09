@@ -58,7 +58,7 @@ class GeneradorComponentes {
    * Genera el código JS para un conjunto de componentes.
    * @param {Array} ast - El AST generado por grammar-components.
    */
-  generar(ast) {
+  generar(ast, opciones = {}) {
     if (!Array.isArray(ast)) return '';
 
     let codigo = '// Componentes autogenerados por YFERA\n\n';
@@ -73,7 +73,7 @@ class GeneradorComponentes {
       }
     }
 
-    if (exportados.length > 0) {
+    if (exportados.length > 0 && opciones.exportar !== false) {
       codigo += `export { ${exportados.join(', ')} };\n`;
     }
 

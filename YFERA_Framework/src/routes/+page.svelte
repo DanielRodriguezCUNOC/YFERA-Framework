@@ -696,13 +696,10 @@
     const zip = new JSZip();
     const res = resultadosUltimaCompilacion;
 
-    // Crear index.html
+    // Crear bundle único y HTML de arranque
     const indexHtml = compilador.generarBundle(res);
     zip.file("index.html", indexHtml);
-
-    // Crear carpetas y archivos individuales
-    zip.file("styles.css", res.css || "");
-    zip.file("app.js", res.js || "");
+    zip.file("bundle.js", res.bundleJs || res.js || "");
 
     // Añadir respaldo del código fuente (.yfera)
     const backupData = JSON.stringify({
@@ -720,6 +717,35 @@
     historialConsola = [
       ...historialConsola,
       { clase: "system", text: "Proyecto exportado exitosamente como .zip" },
+    ];
+  }
+
+  function previewProject() {
+    if (!resultadosUltimaCompilacion || !resultadosUltimaCompilacion.ok) {
+      alert("Primero debes realizar una compilación exitosa.");
+      return;
+    }
+
+    const res = resultadosUltimaCompilacion;
+    const previewHtml = compilador.generarVistaPrevia(res);
+    const blob = new Blob([previewHtml], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const ventana = window.open(url, "_blank", "noopener,noreferrer");
+
+    if (!ventana) {
+      historialConsola = [
+        ...historialConsola,
+        {
+          clase: "error",
+          text: "No se pudo abrir la vista previa. El navegador bloqueó la ventana emergente.",
+        },
+      ];
+      return;
+    }
+
+    historialConsola = [
+      ...historialConsola,
+      { clase: "system", text: "Vista previa abierta en una nueva pestaña." },
     ];
   }
 
@@ -795,6 +821,7 @@
         <input type="file" accept=".yfera" onchange={handleImport} hidden />
       </label>
       <button class="ghost" onclick={exportProjectState}>Respaldar (.yfera)</button>
+      <button class="ghost" onclick={previewProject}>Previsualizar</button>
       <button class="ghost" onclick={exportProject}>Exportar (ZIP)</button>
       <button onclick={compileProject}>Compilar</button>
     </div>
