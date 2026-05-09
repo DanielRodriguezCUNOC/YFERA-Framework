@@ -1,6 +1,8 @@
 /*
 * Analizador Lexico
 */
+\/*[\s\S]*?\*\/    /* ignorar comentarios de bloque */
+
 
 %{
   
@@ -20,6 +22,8 @@
   }
 
   function registrarErrorSintactico(mensaje, lexema, linea, columna){
+  "@"[a-zA-Z\u00C0-\u017F_][a-zA-Z0-9_\u00C0-\u017F]*  return 'REFERENCIA_CAMPO';
+  "@"                return 'REFERENCIA_ID_FORMULARIO';
     erroresSintacticos.push({
       tipo: 'sintactico',
       lexema: lexema,
@@ -44,9 +48,9 @@
   };
 %}
 
-%lex
+  \'[^\']*\'                         return 'CARACTER';
 %options ranges yylineno
-%%
+  [a-zA-Z\u00C0-\u017F_][a-zA-Z0-9_\u00C0-\u017F-]*            return 'IDENTIFICADOR';
 
 \s+                              /* ignorar espacios y saltos */
 [\u200B\u200C\u200D\uFEFF\u00A0]+   /* ignorar invisibles y nbsp */

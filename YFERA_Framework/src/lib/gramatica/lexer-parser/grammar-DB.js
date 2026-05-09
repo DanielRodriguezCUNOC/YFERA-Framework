@@ -14,7 +14,9 @@
     productions_: [...],
     performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate, $$, _$),
     table: [...],
-    defaultActions: {...},
+    defaultActions: {
+var yyerrok = 0, yyclearin = 0;
+...},
     parseError: function(str, hash),
     parse: function(input),
 
@@ -79,7 +81,6 @@ symbols_: {"error":2,"programa":3,"lista_sentencias":4,"EOF":5,"sentencia":6,"cr
 terminals_: {2:"error",5:"EOF",8:"PUNTO_COMA",13:"TABLA",14:"IDENTIFICADOR",15:"COLUMNAS",18:"COMA",19:"ASIGNACION",21:"TIPO_ENTERO",22:"TIPO_FLOTANTE",23:"TIPO_CADENA",24:"TIPO_BOOLEANO",25:"TIPO_CARACTER",26:"PUNTO",27:"CORCHETE_ABRE",29:"CORCHETE_CIERRA",30:"EN",31:"ENTERO",32:"BORRAR",35:"CADENA",36:"CARACTER",37:"DECIMAL",38:"VERDADERO",39:"FALSO"},
 productions_: [0,[3,2],[3,2],[4,0],[4,2],[6,2],[6,2],[6,1],[6,2],[6,2],[6,2],[7,4],[7,4],[16,1],[16,3],[17,3],[20,1],[20,1],[20,1],[20,1],[20,1],[9,3],[9,3],[10,4],[10,5],[10,4],[11,6],[11,6],[12,3],[12,3],[28,1],[28,3],[33,3],[34,1],[34,1],[34,1],[34,1],[34,1],[34,1]],
 performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */) {
-var yyerrok = 0, yyclearin = 0;
 /* this == yyval */
 
 var $0 = $$.length - 1;
@@ -825,55 +826,57 @@ case 0:/* ignorar espacios y saltos */
 break;
 case 1:/* ignorar invisibles y nbsp */
 break;
-case 2:/* ignorar comentarios de línea */
+case 2:/* ignorar comentarios de bloque */
 break;
-case 3:return 13;
+case 3:/* ignorar comentarios de línea */
 break;
-case 4:return 15;
+case 4:return 13;
 break;
-case 5:return 30;
+case 5:return 15;
 break;
-case 6:return 32;
+case 6:return 30;
 break;
-case 7:return 21;
+case 7:return 32;
 break;
-case 8:return 22;
+case 8:return 21;
 break;
-case 9:return 23;
+case 9:return 22;
 break;
-case 10:return 24;
+case 10:return 23;
 break;
-case 11:return 25;
+case 11:return 24;
 break;
-case 12:return 38;
+case 12:return 25;
 break;
-case 13:return 39;
+case 13:return 38;
 break;
-case 14:return 18;
+case 14:return 39;
 break;
-case 15:return 19;
+case 15:return 18;
 break;
-case 16:return 26;
+case 16:return 19;
 break;
-case 17:return 8;
+case 17:return 26;
 break;
-case 18:return 27;
+case 18:return 8;
 break;
-case 19:return 29;
+case 19:return 27;
 break;
-case 20:return 35;
+case 20:return 29;
 break;
-case 21:return 36;
+case 21:return 35;
 break;
-case 22:return 37;
+case 22:return 36;
 break;
-case 23:return 31;
+case 23:return 37;
 break;
-case 24:return 14;
+case 24:return 31;
 break;
-case 25:return 5;
+case 25:return 14;
 break;
-case 26:
+case 26:return 5;
+break;
+case 27:
   var linea = (typeof yy_.yylloc !== 'undefined' && yy_.yylloc) ? (yy_.yylloc.first_line || yy_.yylineno || 0) : ((typeof yy_.yylineno !== 'undefined') ? yy_.yylineno : 0);
   var columna = (typeof yy_.yylloc !== 'undefined' && yy_.yylloc) ? (yy_.yylloc.first_column || 0) : 0;
   resgistrarErrorLexico(yy_.yytext, linea, columna);
@@ -881,8 +884,8 @@ case 26:
 break;
 }
 },
-rules: [/^(?:\s+)/,/^(?:[\u200B\u200C\u200D\uFEFF\u00A0]+)/,/^(?:#.*)/,/^(?:TABLE\b)/,/^(?:COLUMNS\b)/,/^(?:IN\b)/,/^(?:DELETE\b)/,/^(?:int\b)/,/^(?:float\b)/,/^(?:string\b)/,/^(?:boolean\b)/,/^(?:char\b)/,/^(?:true\b)/,/^(?:false\b)/,/^(?:,)/,/^(?:=)/,/^(?:\.)/,/^(?:;)/,/^(?:\[)/,/^(?:\])/,/^(?:"[^\"]*")/,/^(?:'[^\']')/,/^(?:[0-9]+\.[0-9]+)/,/^(?:[0-9]+)/,/^(?:[a-zA-Z_][a-zA-Z0-9_]*)/,/^(?:$)/,/^(?:.)/],
-conditions: {"INITIAL":{"rules":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26],"inclusive":true}}
+rules: [/^(?:\s+)/,/^(?:[\u200B\u200C\u200D\uFEFF\u00A0]+)/,/^(?:\/\*[\s\S]*?\*\/)/,/^(?:#.*)/,/^(?:TABLE\b)/,/^(?:COLUMNS\b)/,/^(?:IN\b)/,/^(?:DELETE\b)/,/^(?:int\b)/,/^(?:float\b)/,/^(?:string\b)/,/^(?:boolean\b)/,/^(?:char\b)/,/^(?:true\b)/,/^(?:false\b)/,/^(?:,)/,/^(?:=)/,/^(?:\.)/,/^(?:;)/,/^(?:\[)/,/^(?:\])/,/^(?:"[^\"]*")/,/^(?:'[^\']')/,/^(?:[0-9]+\.[0-9]+)/,/^(?:[0-9]+)/,/^(?:[a-zA-Z\u00C0-\u017F_][a-zA-Z0-9_\u00C0-\u017F]*)/,/^(?:$)/,/^(?:.)/],
+conditions: {"INITIAL":{"rules":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27],"inclusive":true}}
 });
 return lexer;
 })();

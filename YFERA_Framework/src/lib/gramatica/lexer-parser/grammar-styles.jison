@@ -48,6 +48,8 @@
 \s+                              /* ignorar espacios y saltos */
 [\u200B\u200C\u200D\uFEFF\u00A0]+   /* ignorar invisibles y nbsp */
 
+\/\*[\s\S]*?\*\/    /* ignorar comentarios de bloque */
+
 /* Palabras reservadas */
 "height"              return 'ALTO';
 "width"               return 'ANCHO';
@@ -102,8 +104,8 @@
 [0-9]+("."[0-9]+)?"%"                   return 'PORCENTAJE';
 [0-9]+"."[0-9]+                         return 'DECIMAL';
 [0-9]+                                 return 'ENTERO';
-"$"[a-zA-Z][a-zA-Z0-9]*                 return 'VARIABLE';
-[a-zA-Z][a-zA-Z0-9_-]*               return 'IDENTIFICADOR';
+"$"[a-zA-Z\u00C0-\u017F_][a-zA-Z0-9_\u00C0-\u017F]*                 return 'VARIABLE';
+[a-zA-Z\u00C0-\u017F_][a-zA-Z0-9_\u00C0-\u017F-]*               return 'IDENTIFICADOR';
 "#"                             /* comentarios */
 
 /* Simbolos */
@@ -111,10 +113,12 @@
 "}"                   return 'LLAVE_CIERRA';
 "-"                   return 'GUION';
 ";"                   return 'PUNTO_COMA';
+"=="                  return 'IGUALDAD';
 "="                   return 'ASIGNAR';
 "@"                   return 'DECORADOR';
 "*"                   return 'MULTIPLICADOR';
 "/"                   return 'SLASH';
+"=="                  return 'IGUALDAD';
 "+"                   return 'SUMA';
 "%"                   return 'MODULO';
 "("                   return 'PAREN_ABRE';
@@ -152,8 +156,20 @@ style_definitions
 style_definition
   : IDENTIFICADOR LLAVE_ABRE style_body LLAVE_CIERRA
     { $$ = { tipo: 'estilo', nombre: $1, propiedades: $3 }; }
+  | IDENTIFICADOR GUION VARIABLE LLAVE_ABRE style_body LLAVE_CIERRA
+    { $$ = { tipo: 'estilo', nombre: $1 + '-' + $3, propiedades: $4 }; }
+  | IDENTIFICADOR VARIABLE LLAVE_ABRE style_body LLAVE_CIERRA
+    { $$ = { tipo: 'estilo', nombre: $1 + $2, propiedades: $3 }; }
   | IDENTIFICADOR EXTIENDE IDENTIFICADOR LLAVE_ABRE style_body LLAVE_CIERRA
     { $$ = { tipo: 'estilo', nombre: $1, heredaDe: $3, propiedades: $5 }; }
+  | IDENTIFICADOR EXTIENDE IDENTIFICADOR GUION VARIABLE LLAVE_ABRE style_body LLAVE_CIERRA
+    { $$ = { tipo: 'estilo', nombre: $1, heredaDe: $3 + '-' + $4, propiedades: $6 }; }
+  | IDENTIFICADOR EXTIENDE IDENTIFICADOR VARIABLE LLAVE_ABRE style_body LLAVE_CIERRA
+    { $$ = { tipo: 'estilo', nombre: $1, heredaDe: $3 + $4, propiedades: $5 }; }
+  | PARA variable DESDE expr_numerica_for HASTA expr_numerica_for LLAVE_ABRE style_definitions LLAVE_CIERRA
+    { $$ = { tipo: 'para', variable: $2, inicio: $4, fin: $6, excluye: false, estilos: $8 }; }
+  | PARA variable DESDE expr_numerica_for HASTA_EXCLUYE expr_numerica_for LLAVE_ABRE style_definitions LLAVE_CIERRA
+    { $$ = { tipo: 'para', variable: $2, inicio: $4, fin: $6, excluye: true, estilos: $8 }; }
   ;
 
 style_body
@@ -193,13 +209,13 @@ property_name
   | MAXIMO GUION ALTO ASIGNAR valor_medida
     { $$ = { nombre: 'max-height', valor: $5 }; }
   | FONDO ASIGNAR valor_color
-    { $$ = { nombre: 'background', valor: $3 }; }
+      { $$ = { nombre: 'background-color', valor: $3 }; }
   | COLOR ASIGNAR valor_color
     { $$ = { nombre: 'color', valor: $3 }; }
   | TEXTO GUION ALINEACION ASIGNAR valor_alineacion
     { $$ = { nombre: 'text-align', valor: $5 }; }
   | SIZE ASIGNAR valor_medida
-    { $$ = { nombre: 'font-size', valor: $3 }; }
+     { $$ = { nombre: 'text-size', valor: $3 }; }
   | FUENTE ASIGNAR valor_fuente
     { $$ = { nombre: 'font-family', valor: $3 }; }
   | PADDING ASIGNAR valor_medida
@@ -226,22 +242,57 @@ property_name
     { $$ = { nombre: 'border', valor: $3 }; }
   | BORDE GUION RADIO ASIGNAR valor_medida
     { $$ = { nombre: 'border-radius', valor: $5 }; }
+  | BORDE RADIO ASIGNAR valor_medida
+    { $$ = { nombre: 'border-radius', valor: $4 }; }
+  | BORDE STYLE ASIGNAR tipo_borde
+    { $$ = { nombre: 'border-style', valor: $4 }; }
+  | BORDE COLOR ASIGNAR valor_color
+    { $$ = { nombre: 'border-color', valor: $4 }; }
+  /* Formas con espacio  */
+  | FONDO COLOR ASIGNAR valor_color
+    { $$ = { nombre: 'background-color', valor: $4 }; }
+  | PADDING TOP ASIGNAR valor_medida
+    { $$ = { nombre: 'padding-top', valor: $4 }; }
+  | PADDING BOTTOM ASIGNAR valor_medida
+    { $$ = { nombre: 'padding-bottom', valor: $4 }; }
+  | PADDING LEFT ASIGNAR valor_medida
+    { $$ = { nombre: 'padding-left', valor: $4 }; }
+  | PADDING RIGHT ASIGNAR valor_medida
+    { $$ = { nombre: 'padding-right', valor: $4 }; }
+  | MARGIN TOP ASIGNAR valor_medida
+    { $$ = { nombre: 'margin-top', valor: $4 }; }
+  | MARGIN BOTTOM ASIGNAR valor_medida
+    { $$ = { nombre: 'margin-bottom', valor: $4 }; }
+  | MARGIN LEFT ASIGNAR valor_medida
+    { $$ = { nombre: 'margin-left', valor: $4 }; }
+  | MARGIN RIGHT ASIGNAR valor_medida
+    { $$ = { nombre: 'margin-right', valor: $4 }; }
+  | TEXTO FUENTE ASIGNAR valor_fuente
+    { $$ = { nombre: 'text-font', valor: $4 }; }
+  | BORDE RIGHT ASIGNAR valor_borde
+    { $$ = { nombre: 'border-right', valor: $4 }; }
+  | BORDE ANCHO ASIGNAR valor_medida
+    { $$ = { nombre: 'border-width', valor: $4 }; }
+  | BORDE GUION ANCHO ASIGNAR valor_medida
+    { $$ = { nombre: 'border-width', valor: $5 }; }
+  | TEXTO ALINEACION ASIGNAR valor_alineacion
+    { $$ = { nombre: 'text-align', valor: $4 }; }
+  | TEXTO SIZE ASIGNAR valor_medida
+    { $$ = { nombre: 'text-size', valor: $4 }; }
   ;
 
 valor_medida
-  : ENTERO
-    { $$ = { unidad: 'px', valor: parseInt($1) }; }
-  | DECIMAL
-    { $$ = { unidad: 'px', valor: parseFloat($1) }; }
+  : expr_numerica_for
+    { $$ = $1; }
   | PORCENTAJE
-    { $$ = { unidad: '%', valor: parseFloat($1) }; }
+    { $$ = { tipo: 'porcentaje', valor: parseFloat($1) }; }
   ;
 
 valor_color
   : COLOR_HEX
-    { $$ = $1; }
-  | RGB PAREN_ABRE ENTERO COMA ENTERO COMA ENTERO PAREN_CIERRA
-    { $$ = 'rgb(' + $3 + ',' + $5 + ',' + $7 + ')'; }
+    { $$ = { tipo: 'hex', valor: $1 }; }
+  | RGB PAREN_ABRE expr_numerica_for COMA expr_numerica_for COMA expr_numerica_for PAREN_CIERRA
+    { $$ = { tipo: 'rgb', valor: [$3, $5, $7] }; }
   | COLOR_BLUE   { $$ = 'blue'; }
   | COLOR_WHITE  { $$ = 'white'; }
   | COLOR_RED    { $$ = 'red'; }
@@ -253,29 +304,30 @@ valor_color
   ;
 
 valor_alineacion
-  : CENTER      { $$ = 'center'; }
-  | RIGHT_VALUE { $$ = 'right'; }
-  | LEFT_VALUE  { $$ = 'left'; }
+  : CENTER      { $$ = 'CENTER'; }
+  | RIGHT_VALUE { $$ = 'RIGHT'; }
+  | LEFT_VALUE  { $$ = 'LEFT'; }
   ;
 
 valor_fuente
-  : HELVETICA { $$ = 'Helvetica'; }
-  | SANS      { $$ = 'sans-serif'; }
-  | SERIF     { $$ = 'serif'; }
-  | MONO      { $$ = 'monospace'; }
-  | CURSIVE   { $$ = 'cursive'; }
+  : HELVETICA { $$ = 'HELVETICA'; }
+  | SANS      { $$ = 'SANS'; }
+  | SANS SERIF { $$ = 'SANS SERIF'; }
+  | SERIF     { $$ = 'SERIF'; }
+  | MONO      { $$ = 'MONO'; }
+  | CURSIVE   { $$ = 'CURSIVE'; }
   ;
 
 valor_borde
   : valor_medida tipo_borde valor_color
-    { $$ = $1.valor + $1.unit + ' ' + $2 + ' ' + $3; }
+    { $$ = { ancho: $1, estilo: $2, color: $3 }; }
   ;
 
 tipo_borde
-  : DOTTED { $$ = 'dotted'; }
-  | LINE   { $$ = 'dashed'; }
-  | DOUBLE { $$ = 'double'; }
-  | SOLID  { $$ = 'solid'; }
+  : DOTTED { $$ = 'DOTTED'; }
+  | LINE   { $$ = 'LINE'; }
+  | DOUBLE { $$ = 'DOUBLE'; }
+  | SOLID  { $$ = 'SOLID'; }
   ;
 
 numero
@@ -299,6 +351,8 @@ expr_numerica_for
     { $$ = { op: '-', left: $1, right: $3 }; }
   | expr_numerica_for MODULO termino_numerico_for
     { $$ = { op: '%', left: $1, right: $3 }; }
+  | expr_numerica_for IGUALDAD termino_numerico_for
+    { $$ = { op: '==', left: $1, right: $3 }; }
   ;
 
 termino_numerico_for

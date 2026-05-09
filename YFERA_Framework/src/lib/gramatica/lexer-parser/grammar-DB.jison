@@ -50,6 +50,7 @@
 
 \s+                                 /* ignorar espacios y saltos */
 [\u200B\u200C\u200D\uFEFF\u00A0]+ /* ignorar invisibles y nbsp */
+\/\*[\s\S]*?\*\/    /* ignorar comentarios de bloque */
 "#".*                           /* ignorar comentarios de línea */
 
 "TABLE"                 return 'TABLA';
@@ -77,7 +78,7 @@
 \'[^\']\'                             return 'CARACTER';
 [0-9]+"."[0-9]+                        return 'DECIMAL';
 [0-9]+                                  return 'ENTERO';
-[a-zA-Z_][a-zA-Z0-9_]*                  return 'IDENTIFICADOR';
+[a-zA-Z\u00C0-\u017F_][a-zA-Z0-9_\u00C0-\u017F]*                  return 'IDENTIFICADOR';
 
 <<EOF>>                 return 'EOF';
 

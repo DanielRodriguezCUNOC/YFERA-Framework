@@ -133,6 +133,11 @@ class GeneradorCodigoIntermedio {
    * Valor normalizado como string CSS
    */
   normalizarValor(valor, propiedad) {
+    // Resolver expresiones aritméticas del AST antes de mapear.
+    if (valor && typeof valor === 'object' && valor.op) {
+      valor = this.evaluarExpresion(valor);
+    }
+
     //* Valores de alineación
     if (propiedad.includes('align')) {
       return this.normalizarAlineacion(valor);
@@ -165,7 +170,11 @@ class GeneradorCodigoIntermedio {
 
     //* Valores RGB
     if (typeof valor === 'object' && valor.tipo === 'rgb') {
-      return `rgb(${valor.valor.join(', ')})`;
+      const componentes = (valor.valor || []).map((c) => {
+        if (c && typeof c === 'object' && c.op) return this.evaluarExpresion(c);
+        return c;
+      });
+      return `rgb(${componentes.join(', ')})`;
     }
 
     //* Valores hex
@@ -186,6 +195,7 @@ class GeneradorCodigoIntermedio {
    * Normaliza valores de alineación (CENTER, LEFT, RIGHT)
    */
   normalizarAlineacion(valor) {
+    if (typeof valor !== 'string') return String(valor);
     return this.mapeoAlineacion[valor] || valor.toLowerCase();
   }
 
@@ -193,6 +203,7 @@ class GeneradorCodigoIntermedio {
    * Normaliza valores de fuente
    */
   normalizarFuente(valor) {
+    if (typeof valor !== 'string') return String(valor);
     return this.mapeoFuentes[valor] || valor.toLowerCase();
   }
 
@@ -229,7 +240,28 @@ class GeneradorCodigoIntermedio {
    * Normaliza estilos de borde
    */
   normalizarEstiloBorde(valor) {
+    if (typeof valor !== 'string') return String(valor);
     return this.mapeoBordes[valor] || valor.toLowerCase();
+  }
+
+  evaluarExpresion(expr) {
+    if (typeof expr === 'number') return expr;
+    if (typeof expr === 'string') return expr;
+    if (!expr || typeof expr !== 'object' || !expr.op) return expr;
+
+    const left = this.evaluarExpresion(expr.left);
+    const right = this.evaluarExpresion(expr.right);
+
+    if (typeof left !== 'number' || typeof right !== 'number') return expr;
+
+    if (expr.op === '+') return left + right;
+    if (expr.op === '-') return left - right;
+    if (expr.op === '*') return left * right;
+    if (expr.op === '/') return right === 0 ? 0 : left / right;
+    if (expr.op === '%') return right === 0 ? 0 : left % right;
+    if (expr.op === '==') return left === right ? 1 : 0;
+
+    return expr;
   }
 
   /*
